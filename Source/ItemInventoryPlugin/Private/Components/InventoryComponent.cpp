@@ -23,6 +23,7 @@ void UInventoryComponent::BeginPlay()
 	}
 
 	InventorySlots.OwningComponent = this;
+	SetupReplicationCallbacks();
 }
 
 void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -43,6 +44,13 @@ EInventoryOperationResult UInventoryComponent::TryAddItem(const FItemInstance& I
 		return OpData.Result;
 	}
 
+	// Client: route through server RPC
+	if (!GetOwner()->HasAuthority())
+	{
+		ServerRPC_RequestAddItem(Item, PreferredSlot);
+		return EInventoryOperationResult::Pending;
+	}
+
 	// Execute: try stacking first, then fill empty slots
 	Internal_AddItemStacked(Item, PreferredSlot);
 	return EInventoryOperationResult::Success;
@@ -54,6 +62,12 @@ EInventoryOperationResult UInventoryComponent::TryRemoveItem(const FGuid& Instan
 	if (!ValidateRemoveItem(InstanceId, Count, OpData))
 	{
 		return OpData.Result;
+	}
+
+	if (!GetOwner()->HasAuthority())
+	{
+		ServerRPC_RequestRemoveItem(InstanceId, Count);
+		return EInventoryOperationResult::Pending;
 	}
 
 	Internal_RemoveItem(InstanceId, Count);
@@ -91,6 +105,12 @@ EInventoryOperationResult UInventoryComponent::TryMoveItem(const FGuid& Instance
 		return SourceOpData.Result;
 	}
 
+	if (!GetOwner()->HasAuthority())
+	{
+		ServerRPC_RequestMoveItem(InstanceId, TargetInventory, TargetSlot);
+		return EInventoryOperationResult::Pending;
+	}
+
 	// Atomic: remove from source, add to target
 	Internal_RemoveItem(InstanceId, -1);
 	TargetInventory->Internal_AddItemStacked(ItemCopy);
@@ -121,6 +141,12 @@ EInventoryOperationResult UInventoryComponent::TrySplitStack(const FGuid& Instan
 	if (EmptySlot == INDEX_NONE)
 	{
 		return EInventoryOperationResult::InsufficientSpace;
+	}
+
+	if (!GetOwner()->HasAuthority())
+	{
+		ServerRPC_RequestSplitStack(InstanceId, SplitCount);
+		return EInventoryOperationResult::Pending;
 	}
 
 	// Create new instance for the split portion
@@ -180,6 +206,12 @@ EInventoryOperationResult UInventoryComponent::TryMergeStacks(const FGuid& Sourc
 		return EInventoryOperationResult::StackFull;
 	}
 
+	if (!GetOwner()->HasAuthority())
+	{
+		ServerRPC_RequestMergeStacks(SourceId, TargetId);
+		return EInventoryOperationResult::Pending;
+	}
+
 	// Merge: add source count to target, clear source
 	FItemInstance RemovedItem = SourceSlot->Item;
 	TargetSlot->Item.StackCount = CombinedCount;
@@ -205,6 +237,12 @@ EInventoryOperationResult UInventoryComponent::TrySwapSlots(int32 SlotA, int32 S
 	if (SlotA == SlotB)
 	{
 		return EInventoryOperationResult::Success;
+	}
+
+	if (!GetOwner()->HasAuthority())
+	{
+		ServerRPC_RequestSwapSlots(SlotA, SlotB);
+		return EInventoryOperationResult::Pending;
 	}
 
 	FInventorySlot& A = InventorySlots.Items[SlotA];
@@ -694,6 +732,229 @@ void UInventoryComponent::MarkDirty()
 void UInventoryComponent::BroadcastChanged()
 {
 	OnInventoryChanged.Broadcast();
+}
+
+// ===========================================================================
+// Server RPCs
+// ===========================================================================
+
+void UInventoryComponent::ServerRPC_RequestAddItem_Implementation(const FItemInstance& Item, int32 PreferredSlot)
+{
+	FInventoryOperationData OpData;
+	if (!ValidateAddItem(Item, PreferredSlot, OpData))
+	{
+		ClientRPC_OperationFailed(OpData.Result);
+		return;
+	}
+	Internal_AddItemStacked(Item, PreferredSlot);
+}
+
+void UInventoryComponent::ServerRPC_RequestRemoveItem_Implementation(const FGuid& InstanceId, int32 Count)
+{
+	FInventoryOperationData OpData;
+	if (!ValidateRemoveItem(InstanceId, Count, OpData))
+	{
+		ClientRPC_OperationFailed(OpData.Result);
+		return;
+	}
+	Internal_RemoveItem(InstanceId, Count);
+}
+
+void UInventoryComponent::ServerRPC_RequestMoveItem_Implementation(const FGuid& InstanceId,
+	UInventoryComponent* Target, int32 TargetSlot)
+{
+	if (!Target)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::Failed);
+		return;
+	}
+
+	const FInventorySlot* SourceSlot = FindSlotByInstanceId(InstanceId);
+	if (!SourceSlot || !SourceSlot->bIsOccupied)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::ItemNotFound);
+		return;
+	}
+
+	FItemInstance ItemCopy = SourceSlot->Item;
+
+	FInventoryOperationData TargetOpData;
+	if (!Target->ValidateAddItem(ItemCopy, TargetSlot, TargetOpData))
+	{
+		ClientRPC_OperationFailed(TargetOpData.Result);
+		return;
+	}
+
+	FInventoryOperationData SourceOpData;
+	if (!ValidateRemoveItem(InstanceId, -1, SourceOpData))
+	{
+		ClientRPC_OperationFailed(SourceOpData.Result);
+		return;
+	}
+
+	Internal_RemoveItem(InstanceId, -1);
+	Target->Internal_AddItemStacked(ItemCopy);
+}
+
+void UInventoryComponent::ServerRPC_RequestSplitStack_Implementation(const FGuid& InstanceId, int32 SplitCount)
+{
+	if (SplitCount <= 0)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::Failed);
+		return;
+	}
+
+	FInventorySlot* SourceSlot = FindSlotByInstanceId(InstanceId);
+	if (!SourceSlot || !SourceSlot->bIsOccupied)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::ItemNotFound);
+		return;
+	}
+
+	if (SourceSlot->Item.StackCount <= SplitCount)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::Failed);
+		return;
+	}
+
+	int32 EmptySlot = FindFirstEmptySlot();
+	if (EmptySlot == INDEX_NONE)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::InsufficientSpace);
+		return;
+	}
+
+	// Create new instance for the split portion
+	FItemInstance NewInstance;
+	NewInstance.InstanceId = FGuid::NewGuid();
+	NewInstance.ItemDefinitionId = SourceSlot->Item.ItemDefinitionId;
+	NewInstance.StackCount = SplitCount;
+
+	for (UItemInstanceFragment* Fragment : SourceSlot->Item.InstanceFragments)
+	{
+		if (Fragment)
+		{
+			NewInstance.InstanceFragments.Add(
+				DuplicateObject<UItemInstanceFragment>(Fragment, GetTransientPackage()));
+		}
+	}
+
+	SourceSlot->Item.StackCount -= SplitCount;
+	InventorySlots.MarkItemDirty(*SourceSlot);
+	OnItemUpdated.Broadcast(SourceSlot->Item, SourceSlot->SlotIndex);
+
+	Internal_AddItem(NewInstance, EmptySlot);
+
+	MarkDirty();
+	BroadcastChanged();
+}
+
+void UInventoryComponent::ServerRPC_RequestMergeStacks_Implementation(const FGuid& SourceId, const FGuid& TargetId)
+{
+	FInventorySlot* SourceSlot = FindSlotByInstanceId(SourceId);
+	FInventorySlot* TargetSlot = FindSlotByInstanceId(TargetId);
+
+	if (!SourceSlot || !SourceSlot->bIsOccupied || !TargetSlot || !TargetSlot->bIsOccupied)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::ItemNotFound);
+		return;
+	}
+
+	if (SourceSlot->Item.ItemDefinitionId != TargetSlot->Item.ItemDefinitionId)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::Failed);
+		return;
+	}
+
+	int32 MaxStack = GetMaxStackSize(TargetSlot->Item);
+	int32 CombinedCount = SourceSlot->Item.StackCount + TargetSlot->Item.StackCount;
+
+	if (CombinedCount > MaxStack)
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::StackFull);
+		return;
+	}
+
+	FItemInstance RemovedItem = SourceSlot->Item;
+	TargetSlot->Item.StackCount = CombinedCount;
+	InventorySlots.MarkItemDirty(*TargetSlot);
+
+	Internal_ClearSlot(SourceSlot->SlotIndex);
+
+	OnItemRemoved.Broadcast(RemovedItem, SourceSlot->SlotIndex);
+	OnItemUpdated.Broadcast(TargetSlot->Item, TargetSlot->SlotIndex);
+	MarkDirty();
+	BroadcastChanged();
+}
+
+void UInventoryComponent::ServerRPC_RequestSwapSlots_Implementation(int32 SlotA, int32 SlotB)
+{
+	if (SlotA < 0 || SlotA >= InventorySlots.Items.Num() ||
+		SlotB < 0 || SlotB >= InventorySlots.Items.Num())
+	{
+		ClientRPC_OperationFailed(EInventoryOperationResult::InvalidSlot);
+		return;
+	}
+
+	if (SlotA == SlotB)
+	{
+		return;
+	}
+
+	FInventorySlot& A = InventorySlots.Items[SlotA];
+	FInventorySlot& B = InventorySlots.Items[SlotB];
+
+	Swap(A.Item, B.Item);
+	Swap(A.bIsOccupied, B.bIsOccupied);
+
+	InventorySlots.MarkItemDirty(A);
+	InventorySlots.MarkItemDirty(B);
+
+	if (A.bIsOccupied)
+	{
+		OnItemMoved.Broadcast(A.Item, SlotB, SlotA);
+	}
+	if (B.bIsOccupied)
+	{
+		OnItemMoved.Broadcast(B.Item, SlotA, SlotB);
+	}
+
+	MarkDirty();
+	BroadcastChanged();
+}
+
+// ===========================================================================
+// Client RPC
+// ===========================================================================
+
+void UInventoryComponent::ClientRPC_OperationFailed_Implementation(EInventoryOperationResult Result)
+{
+	OnOperationFailed.Broadcast(Result);
+}
+
+// ===========================================================================
+// Replication Callbacks
+// ===========================================================================
+
+void UInventoryComponent::SetupReplicationCallbacks()
+{
+	InventorySlots.OnSlotAddedCallback = [this](const FInventorySlot& Slot)
+	{
+		OnItemAdded.Broadcast(Slot.Item, Slot.SlotIndex);
+		OnInventoryChanged.Broadcast();
+	};
+
+	InventorySlots.OnSlotRemovedCallback = [this](const FInventorySlot& Slot)
+	{
+		OnItemRemoved.Broadcast(Slot.Item, Slot.SlotIndex);
+		OnInventoryChanged.Broadcast();
+	};
+
+	InventorySlots.OnSlotChangedCallback = [this](const FInventorySlot& Slot)
+	{
+		OnItemUpdated.Broadcast(Slot.Item, Slot.SlotIndex);
+		OnInventoryChanged.Broadcast();
+	};
 }
 
 // ===========================================================================

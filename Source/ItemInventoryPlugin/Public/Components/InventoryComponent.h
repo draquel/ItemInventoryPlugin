@@ -11,10 +11,13 @@
 class UItemDefinition;
 class UItemDatabaseSubsystem;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryOperationFailed, EInventoryOperationResult, Result);
+
 /**
  * Manages an inventory of item instances using pre-allocated slots.
  * Supports stacking, weight limits, tag filtering, and cross-inventory transfers.
- * Replication (RPCs, FastArraySerializer wiring) is added in Phase 5.
+ * Multiplayer: Try* operations route through ServerRPCs when called on clients.
+ * FFastArraySerializer replicates slot changes and fires delegates on clients.
  */
 UCLASS(BlueprintType, ClassGroup = "Inventory", meta = (BlueprintSpawnableComponent))
 class ITEMINVENTORYPLUGIN_API UInventoryComponent : public UActorComponent
@@ -127,6 +130,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Inventory|Events")
 	FOnInventoryChanged OnInventoryChanged;
 
+	/** Fired on clients when a server RPC rejects an operation */
+	UPROPERTY(BlueprintAssignable, Category = "Inventory|Events")
+	FOnInventoryOperationFailed OnOperationFailed;
+
 	// -----------------------------------------------------------------------
 	// Dirty Tracking (for persistence)
 	// -----------------------------------------------------------------------
@@ -139,6 +146,35 @@ protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
+	// -----------------------------------------------------------------------
+	// Server RPCs — received and executed on the server
+	// -----------------------------------------------------------------------
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPC_RequestAddItem(const FItemInstance& Item, int32 PreferredSlot);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPC_RequestRemoveItem(const FGuid& InstanceId, int32 Count);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPC_RequestMoveItem(const FGuid& InstanceId, UInventoryComponent* Target, int32 TargetSlot);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPC_RequestSplitStack(const FGuid& InstanceId, int32 SplitCount);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPC_RequestMergeStacks(const FGuid& SourceId, const FGuid& TargetId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPC_RequestSwapSlots(int32 SlotA, int32 SlotB);
+
+	// -----------------------------------------------------------------------
+	// Client RPC — notify client of server-side rejection
+	// -----------------------------------------------------------------------
+
+	UFUNCTION(Client, Reliable)
+	void ClientRPC_OperationFailed(EInventoryOperationResult Result);
+
 	// -----------------------------------------------------------------------
 	// Validation (const, side-effect-free, reusable for client + server)
 	// -----------------------------------------------------------------------
@@ -166,6 +202,9 @@ private:
 
 	void MarkDirty();
 	void BroadcastChanged();
+
+	/** Set up FFastArraySerializer replication callbacks */
+	void SetupReplicationCallbacks();
 
 	// -----------------------------------------------------------------------
 	// Helpers
