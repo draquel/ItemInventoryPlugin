@@ -1,9 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NiagaraSystem.h"
 #include "Data/ItemDefinitionFragment.h"
 #include "ItemFragment_WorldDisplay.generated.h"
+
+class UNiagaraSystem;
 
 UCLASS(BlueprintType, DisplayName = "World Display")
 class ITEMINVENTORYPLUGIN_API UItemFragment_WorldDisplay : public UItemDefinitionFragment
