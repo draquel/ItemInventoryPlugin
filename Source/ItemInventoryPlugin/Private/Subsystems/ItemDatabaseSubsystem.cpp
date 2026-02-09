@@ -70,6 +70,22 @@ void UItemDatabaseSubsystem::LoadDefinitionAsync(FPrimaryAssetId AssetId, FStrea
 	);
 }
 
+void UItemDatabaseSubsystem::RegisterDefinition(FPrimaryAssetId AssetId, UItemDefinition* Definition)
+{
+	if (!AssetId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemDatabaseSubsystem::RegisterDefinition: Invalid AssetId"));
+		return;
+	}
+	if (!Definition)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemDatabaseSubsystem::RegisterDefinition: Null Definition for %s"), *AssetId.ToString());
+		return;
+	}
+	DefinitionCache.Add(AssetId, Definition);
+	UE_LOG(LogTemp, Log, TEXT("ItemDatabaseSubsystem: Registered definition %s"), *AssetId.ToString());
+}
+
 FItemInstance UItemDatabaseSubsystem::CreateItemInstance(FPrimaryAssetId AssetId, int32 StackCount)
 {
 	FItemInstance Instance;
