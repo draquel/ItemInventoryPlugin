@@ -7,12 +7,14 @@
 
 // ---------------------------------------------------------------------------
 // Reuse helper pattern from existing inventory tests
+// Root objects to prevent GC collection during test execution.
 // ---------------------------------------------------------------------------
 namespace FilterTestHelpers
 {
 	UInventoryComponent* CreateTestInventory(int32 Slots = 10, float MaxWeight = 0.0f)
 	{
 		UInventoryComponent* Comp = NewObject<UInventoryComponent>();
+		Comp->AddToRoot();
 		Comp->MaxSlots = Slots;
 		Comp->MaxWeight = MaxWeight;
 
@@ -24,6 +26,11 @@ namespace FilterTestHelpers
 		}
 		Comp->InventorySlots.OwningComponent = Comp;
 		return Comp;
+	}
+
+	void CleanupInventory(UInventoryComponent* Comp)
+	{
+		if (Comp) { Comp->RemoveFromRoot(); }
 	}
 
 	FItemInstance CreateTestItem(const FString& DefName = TEXT("TestItem"), int32 Stack = 1)
@@ -55,8 +62,9 @@ bool FFilter_Weight_CurrentWeight::RunTest(const FString& Parameters)
 {
 	auto* Comp = FilterTestHelpers::CreateTestInventory(10, 0.0f);
 
-	// With no weight limit configured, GetCurrentWeight should still track
 	TestEqual("Empty inventory weight = 0", Comp->GetCurrentWeight(), 0.0f);
+
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -72,9 +80,10 @@ bool FFilter_Tags_NoFilter::RunTest(const FString& Parameters)
 {
 	auto* Comp = FilterTestHelpers::CreateTestInventory(5);
 
-	// No tag filters set — any item should be accepted
 	FItemInstance Item = FilterTestHelpers::CreateTestItem();
 	TestTrue("No filter = can accept", Comp->CanAcceptItem(Item));
+
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -90,7 +99,6 @@ bool FFilter_Capacity_CanAccept_Full::RunTest(const FString& Parameters)
 {
 	auto* Comp = FilterTestHelpers::CreateTestInventory(2);
 
-	// Fill all slots
 	for (int32 i = 0; i < 2; ++i)
 	{
 		FilterTestHelpers::PlaceItemInSlot(Comp,
@@ -99,6 +107,8 @@ bool FFilter_Capacity_CanAccept_Full::RunTest(const FString& Parameters)
 
 	FItemInstance NewItem = FilterTestHelpers::CreateTestItem(TEXT("Extra"));
 	TestFalse("Full inventory rejects new item", Comp->CanAcceptItem(NewItem));
+
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -114,6 +124,8 @@ bool FFilter_Capacity_CanAccept_HasRoom::RunTest(const FString& Parameters)
 
 	FItemInstance NewItem = FilterTestHelpers::CreateTestItem(TEXT("NewItem"));
 	TestTrue("Room available = can accept", Comp->CanAcceptItem(NewItem));
+
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -127,6 +139,8 @@ bool FFilter_Capacity_CanAccept_InvalidItem::RunTest(const FString& Parameters)
 
 	FItemInstance Invalid;
 	TestFalse("Invalid item rejected", Comp->CanAcceptItem(Invalid));
+
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -143,7 +157,6 @@ bool FFilter_FindByTag_NoMatches::RunTest(const FString& Parameters)
 	auto* Comp = FilterTestHelpers::CreateTestInventory(5);
 	FilterTestHelpers::PlaceItemInSlot(Comp, FilterTestHelpers::CreateTestItem(), 0);
 
-	// Search with a tag container — items don't have tags so no matches
 	FGameplayTagContainer SearchTags;
 	FGameplayTag TestTag = FGameplayTag::RequestGameplayTag(TEXT("Item.Type.Weapon"), false);
 	if (TestTag.IsValid())
@@ -153,6 +166,8 @@ bool FFilter_FindByTag_NoMatches::RunTest(const FString& Parameters)
 
 	TArray<FItemInstance> Results = Comp->FindItemsByTag(SearchTags);
 	TestEqual("No tagged matches", Results.Num(), 0);
+
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -191,6 +206,7 @@ bool FFilter_Integration_AddRemoveReset::RunTest(const FString& Parameters)
 	TestEqual("Back to 3", Comp->GetFilledSlotCount(), 3);
 	TestFalse("Full again", Comp->CanAcceptItem(FilterTestHelpers::CreateTestItem()));
 
+	FilterTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 

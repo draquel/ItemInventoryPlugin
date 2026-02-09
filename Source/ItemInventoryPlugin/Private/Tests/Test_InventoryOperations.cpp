@@ -6,12 +6,14 @@
 
 // ---------------------------------------------------------------------------
 // Helper: create a component with pre-allocated slots (no world needed)
+// Root objects to prevent GC collection during test execution.
 // ---------------------------------------------------------------------------
 namespace InventoryTestHelpers
 {
 	UInventoryComponent* CreateTestInventory(int32 Slots = 10, float Weight = 0.0f)
 	{
 		UInventoryComponent* Comp = NewObject<UInventoryComponent>();
+		Comp->AddToRoot();
 		Comp->MaxSlots = Slots;
 		Comp->MaxWeight = Weight;
 
@@ -24,6 +26,11 @@ namespace InventoryTestHelpers
 		}
 		Comp->InventorySlots.OwningComponent = Comp;
 		return Comp;
+	}
+
+	void CleanupInventory(UInventoryComponent* Comp)
+	{
+		if (Comp) { Comp->RemoveFromRoot(); }
 	}
 
 	FItemInstance CreateTestItem(const FString& DefName = TEXT("TestItem"), int32 Stack = 1)
@@ -63,6 +70,7 @@ bool FInventoryAdd_Basic::RunTest(const FString& Parameters)
 	TestTrue("Item in slot 0", Comp->GetItemInSlot(0).IsValid());
 	TestEqual("Instance ID matches", Comp->GetItemInSlot(0).InstanceId, Item.InstanceId);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -80,6 +88,7 @@ bool FInventoryAdd_PreferredSlot::RunTest(const FString& Parameters)
 	TestTrue("Item in slot 3", Comp->GetItemInSlot(3).IsValid());
 	TestFalse("Slot 0 empty", Comp->GetItemInSlot(0).IsValid());
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -104,6 +113,7 @@ bool FInventoryAdd_FullInventory::RunTest(const FString& Parameters)
 	TestEqual("Full inventory rejects", Result, EInventoryOperationResult::InsufficientSpace);
 	TestEqual("Still 3 items", Comp->GetFilledSlotCount(), 3);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -120,6 +130,7 @@ bool FInventoryAdd_InvalidItem::RunTest(const FString& Parameters)
 	TestEqual("Invalid item rejected", Result, EInventoryOperationResult::InvalidItem);
 	TestEqual("Nothing added", Comp->GetFilledSlotCount(), 0);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -141,6 +152,7 @@ bool FInventoryAdd_MultipleItems::RunTest(const FString& Parameters)
 	TestEqual("5 filled slots", Comp->GetFilledSlotCount(), 5);
 	TestEqual("5 empty remaining", Comp->FindFirstEmptySlot(), 5);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -163,6 +175,7 @@ bool FInventoryRemove_Basic::RunTest(const FString& Parameters)
 	TestEqual("Inventory empty", Comp->GetFilledSlotCount(), 0);
 	TestFalse("Slot 0 empty", Comp->GetItemInSlot(0).IsValid());
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -178,6 +191,7 @@ bool FInventoryRemove_NotFound::RunTest(const FString& Parameters)
 	EInventoryOperationResult Result = Comp->TryRemoveItem(FakeId);
 	TestEqual("Not found", Result, EInventoryOperationResult::ItemNotFound);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -199,6 +213,7 @@ bool FInventoryRemove_Partial::RunTest(const FString& Parameters)
 	TestEqual("Stack reduced to 7", Comp->GetItemInSlot(0).StackCount, 7);
 	TestEqual("Still 1 slot filled", Comp->GetFilledSlotCount(), 1);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -218,6 +233,7 @@ bool FInventoryRemove_ExactStack::RunTest(const FString& Parameters)
 	TestEqual("Remove succeeds", Result, EInventoryOperationResult::Success);
 	TestEqual("Inventory empty", Comp->GetFilledSlotCount(), 0);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -237,6 +253,7 @@ bool FInventoryRemove_OverCount::RunTest(const FString& Parameters)
 	TestEqual("Over-remove fails", Result, EInventoryOperationResult::Failed);
 	TestEqual("Item still there", Comp->GetFilledSlotCount(), 1);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -262,6 +279,7 @@ bool FInventorySwap_BothOccupied::RunTest(const FString& Parameters)
 	TestEqual("A now in slot 2", Comp->GetItemInSlot(2).InstanceId, ItemA.InstanceId);
 	TestEqual("B now in slot 0", Comp->GetItemInSlot(0).InstanceId, ItemB.InstanceId);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -281,6 +299,7 @@ bool FInventorySwap_OneEmpty::RunTest(const FString& Parameters)
 	TestFalse("Slot 1 now empty", Comp->GetItemInSlot(1).IsValid());
 	TestEqual("Item now in slot 4", Comp->GetItemInSlot(4).InstanceId, Item.InstanceId);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -298,6 +317,7 @@ bool FInventorySwap_SameSlot::RunTest(const FString& Parameters)
 	TestEqual("Same slot = success (no-op)", Result, EInventoryOperationResult::Success);
 	TestEqual("Item unchanged", Comp->GetItemInSlot(0).InstanceId, Item.InstanceId);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -312,6 +332,7 @@ bool FInventorySwap_InvalidSlot::RunTest(const FString& Parameters)
 	EInventoryOperationResult Result = Comp->TrySwapSlots(0, 99);
 	TestEqual("Invalid slot rejected", Result, EInventoryOperationResult::InvalidSlot);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -337,6 +358,8 @@ bool FInventoryMove_Basic::RunTest(const FString& Parameters)
 	TestEqual("Target has item", Target->GetFilledSlotCount(), 1);
 	TestEqual("Same instance ID", Target->GetItemInSlot(0).InstanceId, Item.InstanceId);
 
+	InventoryTestHelpers::CleanupInventory(Source);
+	InventoryTestHelpers::CleanupInventory(Target);
 	return true;
 }
 
@@ -363,6 +386,8 @@ bool FInventoryMove_TargetFull::RunTest(const FString& Parameters)
 	TestEqual("Move fails - target full", Result, EInventoryOperationResult::InsufficientSpace);
 	TestEqual("Source still has item", Source->GetFilledSlotCount(), 1);
 
+	InventoryTestHelpers::CleanupInventory(Source);
+	InventoryTestHelpers::CleanupInventory(Target);
 	return true;
 }
 
@@ -379,6 +404,7 @@ bool FInventoryMove_NullTarget::RunTest(const FString& Parameters)
 	EInventoryOperationResult Result = Source->TryMoveItem(Item.InstanceId, nullptr);
 	TestEqual("Null target fails", Result, EInventoryOperationResult::Failed);
 
+	InventoryTestHelpers::CleanupInventory(Source);
 	return true;
 }
 
@@ -409,6 +435,7 @@ bool FInventorySplit_Basic::RunTest(const FString& Parameters)
 	TestNotEqual("Different GUID", NewStack.InstanceId, Item.InstanceId);
 	TestEqual("Same definition", NewStack.ItemDefinitionId, Item.ItemDefinitionId);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -427,6 +454,7 @@ bool FInventorySplit_NoRoom::RunTest(const FString& Parameters)
 	TestEqual("Split fails - no room", Result, EInventoryOperationResult::InsufficientSpace);
 	TestEqual("Stack unchanged", Comp->GetItemInSlot(0).StackCount, 10);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -446,6 +474,7 @@ bool FInventorySplit_InvalidCount::RunTest(const FString& Parameters)
 	TestEqual("Split more fails", Comp->TrySplitStack(Item.InstanceId, 10), EInventoryOperationResult::Failed);
 	TestEqual("Split zero fails", Comp->TrySplitStack(Item.InstanceId, 0), EInventoryOperationResult::Failed);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -469,6 +498,7 @@ bool FInventoryMerge_DifferentDefs::RunTest(const FString& Parameters)
 	EInventoryOperationResult Result = Comp->TryMergeStacks(A.InstanceId, B.InstanceId);
 	TestEqual("Different defs rejected", Result, EInventoryOperationResult::Failed);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -497,6 +527,7 @@ bool FInventoryQuery_HasItem::RunTest(const FString& Parameters)
 	FPrimaryAssetId FakeId(TEXT("ItemDefinition"), TEXT("Nonexistent"));
 	TestFalse("Doesn't have fake item", Comp->HasItem(FakeId));
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -522,6 +553,7 @@ bool FInventoryQuery_GetItemCount::RunTest(const FString& Parameters)
 
 	TestEqual("Total count = 15", Comp->GetItemCount(SwordId), 15);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -547,6 +579,7 @@ bool FInventoryQuery_FindFirstEmpty::RunTest(const FString& Parameters)
 	}
 	TestEqual("All full -> INDEX_NONE", Comp->FindFirstEmptySlot(), INDEX_NONE);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -573,6 +606,7 @@ bool FInventoryQuery_SlotStability::RunTest(const FString& Parameters)
 	TestFalse("Slot 1 is empty", Comp->GetItemInSlot(1).IsValid());
 	TestEqual("C still at slot 2", Comp->GetItemInSlot(2).InstanceId, C.InstanceId);
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 
@@ -595,6 +629,7 @@ bool FInventoryQuery_DirtyTracking::RunTest(const FString& Parameters)
 	Comp->TryRemoveItem(Item.InstanceId);
 	TestTrue("Dirty after remove", Comp->IsDirty());
 
+	InventoryTestHelpers::CleanupInventory(Comp);
 	return true;
 }
 

@@ -75,7 +75,7 @@ EInventoryOperationResult UInventoryComponent::TryAddItem(const FItemInstance& I
 	}
 
 	// Client: route through server RPC
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
 		ServerRPC_RequestAddItem(Item, PreferredSlot);
 		return EInventoryOperationResult::Pending;
@@ -94,7 +94,7 @@ EInventoryOperationResult UInventoryComponent::TryRemoveItem(const FGuid& Instan
 		return OpData.Result;
 	}
 
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
 		ServerRPC_RequestRemoveItem(InstanceId, Count);
 		return EInventoryOperationResult::Pending;
@@ -135,7 +135,7 @@ EInventoryOperationResult UInventoryComponent::TryMoveItem(const FGuid& Instance
 		return SourceOpData.Result;
 	}
 
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
 		ServerRPC_RequestMoveItem(InstanceId, TargetInventory, TargetSlot);
 		return EInventoryOperationResult::Pending;
@@ -173,7 +173,7 @@ EInventoryOperationResult UInventoryComponent::TrySplitStack(const FGuid& Instan
 		return EInventoryOperationResult::InsufficientSpace;
 	}
 
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
 		ServerRPC_RequestSplitStack(InstanceId, SplitCount);
 		return EInventoryOperationResult::Pending;
@@ -236,7 +236,7 @@ EInventoryOperationResult UInventoryComponent::TryMergeStacks(const FGuid& Sourc
 		return EInventoryOperationResult::StackFull;
 	}
 
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
 		ServerRPC_RequestMergeStacks(SourceId, TargetId);
 		return EInventoryOperationResult::Pending;
@@ -269,7 +269,7 @@ EInventoryOperationResult UInventoryComponent::TrySwapSlots(int32 SlotA, int32 S
 		return EInventoryOperationResult::Success;
 	}
 
-	if (!GetOwner()->HasAuthority())
+	if (GetOwner() && !GetOwner()->HasAuthority())
 	{
 		ServerRPC_RequestSwapSlots(SlotA, SlotB);
 		return EInventoryOperationResult::Pending;
