@@ -1,5 +1,6 @@
 #include "Components/InventoryComponent.h"
 #include "Subsystems/ItemDatabaseSubsystem.h"
+#include "Storage/ItemStorageSubsystem.h"
 #include "Data/ItemDefinition.h"
 #include "Data/Fragments/ItemFragment_Stackable.h"
 #include "Net/UnrealNetwork.h"
@@ -24,6 +25,35 @@ void UInventoryComponent::BeginPlay()
 
 	InventorySlots.OwningComponent = this;
 	SetupReplicationCallbacks();
+
+	// Register with storage subsystem for auto-save
+	if (bAutoRegisterStorage && !StorageOwnerId.IsEmpty())
+	{
+		if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+		{
+			if (UItemStorageSubsystem* StorageSS = GI->GetSubsystem<UItemStorageSubsystem>())
+			{
+				StorageSS->RegisterInventory(this, StorageOwnerId);
+			}
+		}
+	}
+}
+
+void UInventoryComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Unregister from storage subsystem (will save if dirty)
+	if (bAutoRegisterStorage && !StorageOwnerId.IsEmpty())
+	{
+		if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+		{
+			if (UItemStorageSubsystem* StorageSS = GI->GetSubsystem<UItemStorageSubsystem>())
+			{
+				StorageSS->UnregisterInventory(this);
+			}
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -972,4 +1002,35 @@ UItemDatabaseSubsystem* UInventoryComponent::GetItemDatabase() const
 		}
 	}
 	return CachedItemDatabase;
+}
+
+// ===========================================================================
+// Storage Operations
+// ===========================================================================
+
+void UInventoryComponent::ManualSave()
+{
+	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+	{
+		if (UItemStorageSubsystem* StorageSS = GI->GetSubsystem<UItemStorageSubsystem>())
+		{
+			StorageSS->SaveInventory(this);
+		}
+	}
+}
+
+void UInventoryComponent::ManualLoad()
+{
+	if (StorageOwnerId.IsEmpty())
+	{
+		return;
+	}
+
+	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
+	{
+		if (UItemStorageSubsystem* StorageSS = GI->GetSubsystem<UItemStorageSubsystem>())
+		{
+			StorageSS->LoadInventory(this, StorageOwnerId);
+		}
+	}
 }

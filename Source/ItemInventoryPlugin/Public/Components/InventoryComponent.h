@@ -10,6 +10,7 @@
 
 class UItemDefinition;
 class UItemDatabaseSubsystem;
+class UItemStorageSubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryOperationFailed, EInventoryOperationResult, Result);
 
@@ -45,6 +46,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory|Config")
 	FGameplayTag InventoryTypeTag;
+
+	// -----------------------------------------------------------------------
+	// Storage / Persistence
+	// -----------------------------------------------------------------------
+
+	/** Unique identifier for this inventory in the storage system (e.g. "Player_0", "Chest_42"). Empty = no auto-persistence. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Storage")
+	FString StorageOwnerId;
+
+	/** If true, automatically registers with ItemStorageSubsystem on BeginPlay */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Storage")
+	bool bAutoRegisterStorage = true;
 
 	// -----------------------------------------------------------------------
 	// State
@@ -135,6 +148,18 @@ public:
 	FOnInventoryOperationFailed OnOperationFailed;
 
 	// -----------------------------------------------------------------------
+	// Storage Operations
+	// -----------------------------------------------------------------------
+
+	/** Manually trigger a save for this inventory */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Storage")
+	void ManualSave();
+
+	/** Manually load this inventory from storage */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Storage")
+	void ManualLoad();
+
+	// -----------------------------------------------------------------------
 	// Dirty Tracking (for persistence)
 	// -----------------------------------------------------------------------
 
@@ -143,6 +168,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
