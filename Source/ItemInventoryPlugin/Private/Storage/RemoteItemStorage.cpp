@@ -2,6 +2,7 @@
 #include "Storage/ItemSystemSettings.h"
 #include "Storage/ItemSerializationUtils.h"
 #include "HttpModule.h"
+#include "HttpManager.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 
