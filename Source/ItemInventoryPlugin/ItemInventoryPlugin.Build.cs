@@ -25,6 +25,9 @@ public class ItemInventoryPlugin : ModuleRules
 			"JsonUtilities",
 			"Niagara",
 			"DeveloperSettings",
+			"UMG",
+			"Slate",
+			"SlateCore",
 		});
 	}
 }
