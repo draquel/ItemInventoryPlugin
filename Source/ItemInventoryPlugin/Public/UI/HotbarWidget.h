@@ -4,10 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/InventorySlotWidget.h"
 #include "HotbarWidget.generated.h"
 
 class UInventoryComponent;
-class UInventorySlotWidget;
 class UHorizontalBox;
 class UBorder;
 
@@ -52,15 +52,33 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hotbar")
 	void RefreshAllSlots();
 
+	/** Set the held (grabbed) highlight on a specific slot. */
+	UFUNCTION(BlueprintCallable, Category = "Hotbar")
+	void SetSlotHeld(int32 InSlotIndex, bool bHeld);
+
 	/** Returns the currently active slot index. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Hotbar")
 	int32 GetActiveSlot() const { return ActiveSlotIndex; }
+
+	/** Relayed when any child slot is left-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "Hotbar")
+	FOnInventorySlotClicked OnSlotClicked;
+
+	/** Relayed when any child slot is right-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "Hotbar")
+	FOnInventorySlotClicked OnSlotRightClicked;
 
 protected:
 	virtual void NativeOnInitialized() override;
 
 private:
 	void BuildWidgetTree();
+
+	UFUNCTION()
+	void HandleChildSlotClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory);
+
+	UFUNCTION()
+	void HandleChildSlotRightClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory);
 
 	UPROPERTY()
 	TObjectPtr<UBorder> RootBorder;

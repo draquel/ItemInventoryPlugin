@@ -261,6 +261,13 @@ void UInventorySlotWidget::RefreshSlot()
 void UInventorySlotWidget::SetSelected(bool bInSelected)
 {
 	bIsSelected = bInSelected;
+
+	// Held state takes visual priority over selected state
+	if (bIsHeld)
+	{
+		return;
+	}
+
 	if (BackgroundImage)
 	{
 		const bool bHasCustomBrush = SlotBackgroundBrush.HasUObject() || SlotBackgroundBrush.GetResourceName() != NAME_None;
@@ -289,6 +296,39 @@ void UInventorySlotWidget::SetSelected(bool bInSelected)
 			}
 		}
 	}
+}
+
+void UInventorySlotWidget::SetHeld(bool bInHeld)
+{
+	bIsHeld = bInHeld;
+	if (bIsHeld)
+	{
+		if (BackgroundImage)
+		{
+			BackgroundImage->SetColorAndOpacity(FLinearColor(0.8f, 0.6f, 0.2f, 0.9f));
+		}
+	}
+	else
+	{
+		// Revert to selected/default state
+		SetSelected(bIsSelected);
+	}
+}
+
+FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnSlotClicked.Broadcast(SlotIndex, BoundInventory);
+		return FReply::Handled();
+	}
+	else if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		OnSlotRightClicked.Broadcast(SlotIndex, BoundInventory);
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 // --- Delegate Handlers ---

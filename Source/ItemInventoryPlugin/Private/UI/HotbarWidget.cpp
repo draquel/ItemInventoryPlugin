@@ -80,6 +80,8 @@ void UHotbarWidget::InitHotbar(UInventoryComponent* InInventory, int32 NumSlots)
 
 		SlotWidget->InitSlot(BoundInventory, i);
 		SlotWidget->SetSelected(i == ActiveSlotIndex);
+		SlotWidget->OnSlotClicked.AddDynamic(this, &UHotbarWidget::HandleChildSlotClicked);
+		SlotWidget->OnSlotRightClicked.AddDynamic(this, &UHotbarWidget::HandleChildSlotRightClicked);
 		SlotWidgets.Add(SlotWidget);
 
 		// Add directly to horizontal box
@@ -118,4 +120,22 @@ void UHotbarWidget::RefreshAllSlots()
 			SlotWidget->RefreshSlot();
 		}
 	}
+}
+
+void UHotbarWidget::SetSlotHeld(int32 InSlotIndex, bool bHeld)
+{
+	if (InSlotIndex >= 0 && InSlotIndex < SlotWidgets.Num() && SlotWidgets[InSlotIndex])
+	{
+		SlotWidgets[InSlotIndex]->SetHeld(bHeld);
+	}
+}
+
+void UHotbarWidget::HandleChildSlotClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)
+{
+	OnSlotClicked.Broadcast(ChildSlotIndex, Inventory);
+}
+
+void UHotbarWidget::HandleChildSlotRightClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)
+{
+	OnSlotRightClicked.Broadcast(ChildSlotIndex, Inventory);
 }

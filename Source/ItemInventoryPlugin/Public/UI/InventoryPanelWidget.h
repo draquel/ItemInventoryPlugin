@@ -4,10 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/InventorySlotWidget.h"
 #include "InventoryPanelWidget.generated.h"
 
 class UInventoryComponent;
-class UInventorySlotWidget;
 class UBorder;
 class UVerticalBox;
 class UUniformGridPanel;
@@ -66,11 +66,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "InventoryPanel")
 	void RefreshAllSlots();
 
+	/** Set the held (grabbed) highlight on a specific inventory slot. */
+	UFUNCTION(BlueprintCallable, Category = "InventoryPanel")
+	void SetSlotHeld(int32 InSlotIndex, bool bHeld);
+
+	/** Relayed when any child slot is left-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "InventoryPanel")
+	FOnInventorySlotClicked OnSlotClicked;
+
+	/** Relayed when any child slot is right-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "InventoryPanel")
+	FOnInventorySlotClicked OnSlotRightClicked;
+
 protected:
 	virtual void NativeOnInitialized() override;
 
 private:
 	void BuildWidgetTree();
+
+	UFUNCTION()
+	void HandleChildSlotClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory);
+
+	UFUNCTION()
+	void HandleChildSlotRightClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory);
 
 	UPROPERTY()
 	TObjectPtr<UBorder> RootBorder;

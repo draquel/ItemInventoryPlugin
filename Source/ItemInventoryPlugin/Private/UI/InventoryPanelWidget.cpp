@@ -96,6 +96,8 @@ void UInventoryPanelWidget::InitPanel(UInventoryComponent* InInventory, int32 St
 		if (SlotWidget)
 		{
 			SlotWidget->InitSlot(BoundInventory, InventorySlotIndex);
+			SlotWidget->OnSlotClicked.AddDynamic(this, &UInventoryPanelWidget::HandleChildSlotClicked);
+			SlotWidget->OnSlotRightClicked.AddDynamic(this, &UInventoryPanelWidget::HandleChildSlotRightClicked);
 			GridPanel->AddChildToUniformGrid(SlotWidget, Row, Col);
 			SlotWidgets.Add(SlotWidget);
 		}
@@ -111,4 +113,24 @@ void UInventoryPanelWidget::RefreshAllSlots()
 			SlotWidget->RefreshSlot();
 		}
 	}
+}
+
+void UInventoryPanelWidget::SetSlotHeld(int32 InSlotIndex, bool bHeld)
+{
+	// Convert absolute inventory slot index to local array index
+	const int32 LocalIndex = InSlotIndex - CachedStartSlot;
+	if (LocalIndex >= 0 && LocalIndex < SlotWidgets.Num() && SlotWidgets[LocalIndex])
+	{
+		SlotWidgets[LocalIndex]->SetHeld(bHeld);
+	}
+}
+
+void UInventoryPanelWidget::HandleChildSlotClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)
+{
+	OnSlotClicked.Broadcast(ChildSlotIndex, Inventory);
+}
+
+void UInventoryPanelWidget::HandleChildSlotRightClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)
+{
+	OnSlotRightClicked.Broadcast(ChildSlotIndex, Inventory);
 }

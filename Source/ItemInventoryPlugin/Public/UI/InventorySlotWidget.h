@@ -14,6 +14,9 @@ class USizeBox;
 class UOverlay;
 class UTexture2D;
 
+/** Fired when an inventory slot is clicked. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventorySlotClicked, int32, SlotIndex, UInventoryComponent*, Inventory);
+
 /**
  * Single inventory slot display widget.
  *
@@ -67,13 +70,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "InventorySlot")
 	void SetSelected(bool bInSelected);
 
+	/** Set whether this slot shows the held/grabbed highlight (gold). */
+	UFUNCTION(BlueprintCallable, Category = "InventorySlot")
+	void SetHeld(bool bInHeld);
+
 	/** Returns the slot index this widget is bound to. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "InventorySlot")
 	int32 GetSlotIndex() const { return SlotIndex; }
 
+	/** Fired when this slot is left-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "InventorySlot")
+	FOnInventorySlotClicked OnSlotClicked;
+
+	/** Fired when this slot is right-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "InventorySlot")
+	FOnInventorySlotClicked OnSlotRightClicked;
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
 	/** Build the Slate widget tree programmatically. */
@@ -111,6 +127,7 @@ private:
 
 	int32 SlotIndex = -1;
 	bool bIsSelected = false;
+	bool bIsHeld = false;
 
 	/** Handle for async icon loading. */
 	TSharedPtr<FStreamableHandle> IconLoadHandle;
