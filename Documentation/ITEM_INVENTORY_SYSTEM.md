@@ -359,3 +359,145 @@ An editor utility that shows:
 - Per-item detail panel showing all fragments
 - Tag-based filtering (show all weapons, show all rare+ items)
 - Validation warnings (missing required tags, fragments without data, etc.)
+
+---
+
+## UI Widgets
+
+### Design Approach: Programmatic Widget Trees
+
+All UI widgets in this plugin are built **entirely in C++** using programmatic `WidgetTree` construction in `NativeOnInitialized()`. No UMG Designer `.uasset` files are used. This approach was chosen because:
+
+- Widgets are tightly coupled to inventory data and need deterministic slot counts driven by runtime configuration
+- C++ construction avoids editor round-trips and makes the widgets self-contained
+- Blueprint subclassing is still supported via `TSubclassOf<>` overrides on the controller for skinning
+
+**Key pattern:** Each widget overrides `NativeOnInitialized()`, calls a private `BuildWidgetTree()` method that constructs the Slate widget hierarchy using `WidgetTree->ConstructWidget<>()`, and sets `WidgetTree->RootWidget`. Initialization of data bindings (inventory component, slot index) happens separately via an `Init*()` call after the widget is created and added to the viewport.
+
+**Timing constraint:** `BuildWidgetTree()` must run in `NativeOnInitialized()`, NOT `NativeConstruct()`. `AddToViewport()` calls `TakeWidget()` → `RebuildWidget()` before `NativeConstruct` fires, so building the tree in `NativeConstruct` results in an empty widget.
+
+### UInventorySlotWidget
+
+**Path:** `Source/ItemInventoryPlugin/Public/UI/InventorySlotWidget.h`
+
+Single inventory slot display. Reusable by both the hotbar and inventory panel.
+
+**Widget tree:**
+```
+USizeBox (SlotSize x SlotSize, default 64px)
+└── UOverlay
+    ├── UImage (BackgroundImage) — Fill/Fill, dark default or custom brush
+    ├── UImage (IconImage) — Center/Center, async-loaded from UItemDefinition::Icon
+    └── UTextBlock (StackCountText) — Right/Bottom, visible when StackCount > 1
+```
+
+**Initialization:** `InitSlot(UInventoryComponent*, int32 SlotIndex)` binds the widget to an inventory and slot. The widget subscribes to `OnItemAdded`, `OnItemRemoved`, `OnItemUpdated`, and `OnInventoryChanged` delegates, filtering by its slot index.
+
+**Icon loading:** Uses `UAssetManager::GetStreamableManager().RequestAsyncLoad()` for icons referenced via `TSoftObjectPtr<UTexture2D>`. Shows a green placeholder tint while loading or if no icon is set. Cancels in-flight loads on destruction.
+
+**Visual states:**
+| State | Background Color | Trigger |
+|-------|-----------------|---------|
+| Default | `(0.08, 0.08, 0.12, 0.9)` | No selection, no held |
+| Selected | `(0.3, 0.5, 0.8, 0.9)` blue | `SetSelected(true)` — active hotbar slot |
+| Held | `(0.8, 0.6, 0.2, 0.9)` gold | `SetHeld(true)` — click-to-move grabbed state |
+
+Held state takes visual priority over selected state. Clearing held reverts to the current selected/default state.
+
+**Click handling:** Overrides `NativeOnMouseButtonDown`. Left-click broadcasts `OnSlotClicked`, right-click broadcasts `OnSlotRightClicked`. Both delegates carry `(int32 SlotIndex, UInventoryComponent* Inventory)`.
+
+**Delegate type:** `FOnInventorySlotClicked` — declared above the class, used by slots, hotbar, and panel.
+
+### UHotbarWidget
+
+**Path:** `Source/ItemInventoryPlugin/Public/UI/HotbarWidget.h`
+
+Always-visible horizontal row of slots at the bottom-center of the viewport. Displays inventory slots `[0, NumSlots)` (default 9).
+
+**Widget tree:**
+```
+UBorder (dark semi-transparent background, 4px padding)
+└── UHorizontalBox
+    └── [N] UInventorySlotWidget (created via CreateWidget in InitHotbar)
+```
+
+**Initialization:** `InitHotbar(UInventoryComponent*, int32 NumSlots)` creates slot widgets using `CreateWidget<UInventorySlotWidget>()` (not `WidgetTree->ConstructWidget`, since child user widgets need their own widget tree lifecycle). Each child slot's `OnSlotClicked` and `OnSlotRightClicked` delegates are bound to relay handlers that re-broadcast on the hotbar's own `OnSlotClicked`/`OnSlotRightClicked` delegates.
+
+**Active slot:** `SetActiveSlot(int32)` manages the blue selection highlight on one slot at a time.
+
+**Held visual:** `SetSlotHeld(int32 SlotIndex, bool)` forwards to the child slot's `SetHeld()`.
+
+**Visibility modes:**
+- `HitTestInvisible` — default state, display-only (inventory closed)
+- `Visible` — interactive, receives mouse clicks (inventory open)
+
+### UInventoryPanelWidget
+
+**Path:** `Source/ItemInventoryPlugin/Public/UI/InventoryPanelWidget.h`
+
+Toggle-visible grid panel for inventory slots beyond the hotbar range. Shows slots `[StartSlot, MaxSlots)`.
+
+**Widget tree:**
+```
+UBorder (dark background, configurable padding)
+└── UVerticalBox
+    ├── UTextBlock ("Inventory" title, size 16)
+    └── UUniformGridPanel (configurable columns, default 5)
+        └── [N] UInventorySlotWidget (row/col computed from linear index)
+```
+
+**Initialization:** `InitPanel(UInventoryComponent*, int32 StartSlot)` computes `NumSlotsToShow = MaxSlots - StartSlot` and creates slot widgets in a grid layout. Like the hotbar, child slot delegates are bound and relayed.
+
+**Held visual:** `SetSlotHeld(int32 InSlotIndex, bool)` converts from absolute inventory index to local array index via `InSlotIndex - CachedStartSlot`.
+
+### UItemCursorWidget
+
+**Path:** `Source/ItemInventoryPlugin/Public/UI/ItemCursorWidget.h`
+
+Floating icon that follows the mouse cursor while an item is grabbed via click-to-move.
+
+**Widget tree:**
+```
+USizeBox (48x48)
+└── UImage (item icon)
+```
+
+**Behavior:** `NativeTick` reads `GetOwningPlayer()->GetMousePosition()` and calls `SetPositionInViewport()` with an 8px offset. The widget is set to `HitTestInvisible` so clicks pass through to slots beneath.
+
+**API:**
+- `ShowWithIcon(TSoftObjectPtr<UTexture2D>)` — loads icon (sync if cached, async otherwise), sets visible
+- `HideCursor()` — collapses widget, cancels pending async loads
+
+**Lifecycle:** Created lazily by the player controller on first use, added at Z-order 100 to float above all other UI.
+
+### Click-to-Move Interaction Flow
+
+The click-to-move system enables item rearrangement between hotbar and inventory panel. The state machine lives in `AVCPlayerController` (VoxelCharacterPlugin), while the widgets and delegates live in ItemInventoryPlugin.
+
+**Delegate chain:**
+```
+UInventorySlotWidget::OnSlotClicked
+  → UHotbarWidget/UInventoryPanelWidget::HandleChildSlotClicked (relay)
+    → UHotbarWidget/UInventoryPanelWidget::OnSlotClicked (re-broadcast)
+      → AVCPlayerController::OnSlotClickedFromUI (state machine)
+```
+
+**State machine (in AVCPlayerController):**
+```
+State: Nothing Held (HeldSlotIndex == INDEX_NONE)
+  ├── Left-click occupied slot → EnterHeldState (gold highlight + cursor icon)
+  └── Left-click empty slot → no-op
+
+State: Item Held (HeldSlotIndex >= 0)
+  ├── Left-click same slot → CancelHeldState
+  ├── Left-click different slot → ExecuteSwapAndClearHeld (TrySwapSlots RPC)
+  ├── Right-click anywhere → CancelHeldState
+  └── Close inventory (Tab) → CancelHeldState (via HideInventoryPanels)
+```
+
+**Visual feedback:**
+- Source slot: gold highlight via `SetSlotHeld(true)` on the correct container widget
+- Cursor: `UItemCursorWidget` shows the grabbed item's icon following the mouse
+- Both cleared on swap completion or cancel
+
+**Hotbar interactivity toggle:** When inventory opens, hotbar switches from `HitTestInvisible` to `Visible` so it can receive clicks. On close, it reverts to `HitTestInvisible`.

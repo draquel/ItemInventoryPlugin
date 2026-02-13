@@ -7,7 +7,7 @@ Core item data layer, inventory management, loot table generation, and persisten
 ## Documentation
 
 This plugin's `Documentation/` folder contains:
-- `ITEM_INVENTORY_SYSTEM.md` — Detailed design for item definitions, the fragment system, inventory component internals, loot table generation, and the storage/persistence layer.
+- `ITEM_INVENTORY_SYSTEM.md` — Detailed design for item definitions, the fragment system, inventory component internals, loot table generation, storage/persistence, and **UI widgets** (slot, hotbar, panel, cursor, click-to-move interaction).
 
 Also reference:
 - `Plugins/CommonGameFramework/Documentation/ARCHITECTURE.md` — Master architecture, data flow, replication model, phased build plan.
@@ -413,6 +413,50 @@ PrivateDependencyModuleNames.AddRange(new string[]
 4. Project settings for storage selection
 5. Auto-save with dirty tracking on UInventoryComponent
 6. Integration tests
+
+## UI Widgets
+
+This plugin provides inventory UI widgets. They live in `Source/ItemInventoryPlugin/Public/UI/` and `Private/UI/`. See `Documentation/ITEM_INVENTORY_SYSTEM.md` section "UI Widgets" for full documentation.
+
+### File Layout
+
+```
+Source/ItemInventoryPlugin/
+├── Public/UI/
+│   ├── InventorySlotWidget.h       ← Single slot: icon, stack count, click delegates
+│   ├── HotbarWidget.h              ← Horizontal slot row, always-visible
+│   ├── InventoryPanelWidget.h      ← Grid of slots, toggle-visible
+│   └── ItemCursorWidget.h          ← Floating mouse-following icon
+└── Private/UI/
+    ├── InventorySlotWidget.cpp
+    ├── HotbarWidget.cpp
+    ├── InventoryPanelWidget.cpp
+    └── ItemCursorWidget.cpp
+```
+
+### Widget Construction Pattern
+
+All widgets use **programmatic WidgetTree construction** — no UMG Designer assets. The pattern is:
+
+1. Override `NativeOnInitialized()` → call private `BuildWidgetTree()`
+2. `BuildWidgetTree()` uses `WidgetTree->ConstructWidget<>()` to create Slate primitives (USizeBox, UImage, UOverlay, etc.)
+3. Set `WidgetTree->RootWidget` to the root element
+4. Child UUserWidget instances (e.g., slot widgets inside a hotbar) use `CreateWidget<>()` instead of `WidgetTree->ConstructWidget<>()` because they need their own widget tree lifecycle
+5. Data binding (inventory component, slot index) is a separate `Init*()` call
+
+**Do NOT** build widget trees in `NativeConstruct()` — `AddToViewport()` triggers `RebuildWidget()` before `NativeConstruct` fires.
+
+### Delegate Relay Pattern
+
+Leaf widgets (UInventorySlotWidget) fire delegates on click. Container widgets (UHotbarWidget, UInventoryPanelWidget) bind to each child's delegates and re-broadcast on their own delegates. The player controller binds to the container delegates. This keeps the controller decoupled from individual slot widgets.
+
+```
+Slot::OnSlotClicked → Container::HandleChildSlotClicked → Container::OnSlotClicked → Controller
+```
+
+### Build.cs Dependencies
+
+UI widgets require: `UMG`, `Slate`, `SlateCore`, `InputCore` (for `EKeys` in click handling).
 
 ## Critical Implementation Notes
 
