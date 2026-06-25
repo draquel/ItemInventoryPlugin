@@ -73,7 +73,7 @@ void UInstanceFragment_CustomDataMap::DeserializeFragment(const TSharedPtr<FJson
 			FString Value;
 			if (Pair.Value->TryGetString(Value))
 			{
-				CustomData.Add(Pair.Key, Value);
+				CustomData.Add(FString(*Pair.Key), Value);
 			}
 		}
 	}
