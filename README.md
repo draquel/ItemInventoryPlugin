@@ -1,6 +1,6 @@
 # ItemInventoryPlugin
 
-Core item definition, inventory management, loot table generation, and persistence system for Unreal Engine 5.7. Server-authoritative with full multiplayer replication.
+Core item definition, inventory management, loot table generation, and persistence system for Unreal Engine 5.8. Server-authoritative with full multiplayer replication.
 
 ## What This Plugin Does
 
@@ -54,7 +54,7 @@ Swappable storage backends behind a common interface:
 
 ## Requirements
 
-- Unreal Engine 5.7
+- Unreal Engine 5.8
 - [CommonGameFramework](../CommonGameFramework/) plugin
 - GameplayAbilities plugin (enabled in .uproject)
 
