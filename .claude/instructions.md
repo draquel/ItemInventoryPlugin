@@ -31,7 +31,8 @@ ItemInventoryPlugin/
 │   │   │   │   │   ├── ItemFragment_Durability.h  ← Durability fragment
 │   │   │   │   │   ├── ItemFragment_Stackable.h   ← Stack rules fragment
 │   │   │   │   │   ├── ItemFragment_Equipment.h   ← Marks item as equippable (slot, visuals, GAS, StatModifiers)
-│   │   │   │   │   └── ItemFragment_WorldDisplay.h← Mesh, material, effects for world representation
+│   │   │   │   │   ├── ItemFragment_Key.h         ← Marks item as a key (Item.Key.* KeyTag, bConsumeOnUnlock)
+│   │   │   │   │   └── ItemFragment_WorldDisplay.h← Mesh, material, WorldRotation (lying pose), effects for world representation
 │   │   │   │   ├── LootTable.h                    ← ULootTable data asset
 │   │   │   │   └── LootEntry.h                    ← FLootEntry struct (entries within loot tables)
 │   │   │   ├── Components/

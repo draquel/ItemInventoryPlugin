@@ -105,6 +105,19 @@ DropVFX: TSoftObjectPtr<UNiagaraSystem>
 PickupSFX: TSoftObjectPtr<USoundBase>
 ```
 
+### Key fragment
+
+`UItemFragment_Key` {`KeyTag` (Item.Key.*), `bConsumeOnUnlock`} marks an item as a key. A lock names the
+tag it accepts; a consumer walks the interactor's inventory (`IInventoryOwner` → `UInventoryComponent`
+slots → definition → fragment) for an item whose `Opens(LockTag)` is true and removes one when the
+fragment says so. The dungeon boss door (VoxelWorldPOI) is the first lock.
+
+### World pose
+
+`UItemFragment_WorldDisplay::WorldRotation` is the mesh-local rotation a world item takes when it lies
+in the world (dropped or burst from a container); `AWorldItem` applies it with the mesh. A sword authored
+blade-up lies flat with Roll = 90.
+
 ### Data-driven stats on fragments
 
 `UItemFragment_Equipment::StatModifiers` and `UItemFragment_Consumable::AttributeChanges` are
