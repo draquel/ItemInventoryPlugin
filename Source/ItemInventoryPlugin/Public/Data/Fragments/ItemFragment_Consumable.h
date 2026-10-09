@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayEffect.h"
+#include "Types/CGFCombatTypes.h"
 #include "Data/ItemDefinitionFragment.h"
 #include "ItemFragment_Consumable.generated.h"
 
@@ -12,6 +13,13 @@ class ITEMINVENTORYPLUGIN_API UItemFragment_Consumable : public UItemDefinitionF
 	GENERATED_BODY()
 
 public:
+	/**
+	 * Data-driven instant changes on use ("+25 Health", "+20 Stamina"), no effect asset needed.
+	 * Applied before ConsumeEffect / ConsumeAbility; any of the three may be empty.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Consumable")
+	TArray<FCGFAttributeModifier> AttributeChanges;
+
 	/** Gameplay effect applied when consumed */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Consumable")
 	TSubclassOf<UGameplayEffect> ConsumeEffect;

@@ -4,6 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayEffect.h"
+#include "Types/CGFCombatTypes.h"
 #include "Data/ItemDefinitionFragment.h"
 #include "ItemFragment_Equipment.generated.h"
 
@@ -33,4 +34,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Effects")
 	TArray<TSubclassOf<UGameplayEffect>> OnEquipEffects;
+
+	/**
+	 * Data-driven lasting stats while equipped ("+3 Defense", "+10 MaxHealth"), no effect asset
+	 * needed. Applied through the project's stat-modifier effect class (see
+	 * UEquipmentGASSettings::StatModifierEffectClass) and removed on unequip.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Stats")
+	TArray<FCGFAttributeModifier> StatModifiers;
 };
