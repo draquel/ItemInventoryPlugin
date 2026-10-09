@@ -27,10 +27,10 @@ ItemInventoryPlugin/
 │   │   │   │   ├── ItemDefinitionFragment.h       ← UItemDefinitionFragment (base class)
 │   │   │   │   ├── Fragments/
 │   │   │   │   │   ├── ItemFragment_Weapon.h      ← Weapon stats fragment
-│   │   │   │   │   ├── ItemFragment_Consumable.h  ← Consumable behavior fragment
+│   │   │   │   │   ├── ItemFragment_Consumable.h  ← Consumable behavior fragment (AttributeChanges, effect/ability, cooldown)
 │   │   │   │   │   ├── ItemFragment_Durability.h  ← Durability fragment
 │   │   │   │   │   ├── ItemFragment_Stackable.h   ← Stack rules fragment
-│   │   │   │   │   ├── ItemFragment_Equipment.h   ← Marks item as equippable (slot, visuals)
+│   │   │   │   │   ├── ItemFragment_Equipment.h   ← Marks item as equippable (slot, visuals, GAS, StatModifiers)
 │   │   │   │   │   └── ItemFragment_WorldDisplay.h← Mesh, material, effects for world representation
 │   │   │   │   ├── LootTable.h                    ← ULootTable data asset
 │   │   │   │   └── LootEntry.h                    ← FLootEntry struct (entries within loot tables)

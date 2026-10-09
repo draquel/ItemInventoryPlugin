@@ -105,6 +105,17 @@ DropVFX: TSoftObjectPtr<UNiagaraSystem>
 PickupSFX: TSoftObjectPtr<USoundBase>
 ```
 
+### Data-driven stats on fragments
+
+`UItemFragment_Equipment::StatModifiers` and `UItemFragment_Consumable::AttributeChanges` are
+`TArray<FCGFAttributeModifier>` ({Attribute, Magnitude}, CommonGameFramework). They need no gameplay-effect
+asset: equipment stats are applied through the project's stat-modifier effect class
+(EquipmentPlugin `UEquipmentGASSettings::StatModifierEffectClass`) and removed on unequip; consumable
+changes are applied once through a transient instant effect by whoever handles "use" (VoxelCharacterPlugin
+`AVCCharacterBase::UseItemInSlot`). The class-based `PassiveEffects` / `OnEquipEffects` / `ConsumeEffect` /
+`ConsumeAbility` fields remain for authored effects. Scripts build modifiers with
+`CGFGameplayEffectStatics.make_attribute_modifier(attribute_set_class, "Defense", 3.0)`.
+
 ### UItemDatabaseSubsystem
 
 `UGameInstanceSubsystem` — lives for the entire game session. Responsibilities:
