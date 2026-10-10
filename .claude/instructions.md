@@ -23,6 +23,7 @@ ItemInventoryPlugin/
 │   ├── ItemSystem/                        ← Runtime module: items, inventories, loot, storage
 │   │   ├── Public/
 │   │   │   ├── Data/
+│   │   │   │   ├── CraftingRecipe.h               ← UPrimaryDataAsset: ingredients -> output, optional Crafting.Station.* requirement
 │   │   │   │   ├── ItemDefinition.h               ← UItemDefinition (PrimaryDataAsset)
 │   │   │   │   ├── ItemDefinitionFragment.h       ← UItemDefinitionFragment (base class)
 │   │   │   │   ├── Fragments/
@@ -33,6 +34,7 @@ ItemInventoryPlugin/
 │   │   │   │   │   ├── ItemFragment_Equipment.h   ← Marks item as equippable (slot, visuals, GAS, StatModifiers)
 │   │   │   │   │   ├── ItemFragment_Key.h         ← Marks item as a key (Item.Key.* KeyTag, bConsumeOnUnlock)
 │   │   │   │   │   ├── ItemFragment_LightSource.h ← Carried light (lumens, radius, colour, fuel burn per second / step); fuel = the Durability fragment
+│   │   │   │   │   ├── ItemFragment_Placeable.h   ← Using the item spawns ActorClass on the ground in front of the user (campfire kit, feature 8)
 │   │   │   │   │   └── ItemFragment_WorldDisplay.h← Mesh, material, WorldRotation (lying pose), effects for world representation
 │   │   │   │   ├── LootTable.h                    ← ULootTable data asset
 │   │   │   │   └── LootEntry.h                    ← FLootEntry struct (entries within loot tables)
@@ -40,6 +42,7 @@ ItemInventoryPlugin/
 │   │   │   │   └── InventoryComponent.h           ← UInventoryComponent (replicated)
 │   │   │   ├── Subsystems/
 │   │   │   │   ├── ItemDatabaseSubsystem.h        ← UGameInstanceSubsystem: item registry
+│   │   │   │   ├── CraftingSubsystem.h            ← UGameInstanceSubsystem: recipe registry (primary asset type CraftingRecipe) + CanCraft / Craft (feature 8)
 │   │   │   │   └── LootGenerationSubsystem.h      ← UWorldSubsystem: loot rolling
 │   │   │   ├── Storage/
 │   │   │   │   ├── LocalItemStorage.h             ← IItemStorage: local file/SaveGame impl
@@ -466,3 +469,16 @@ UI widgets require: `UMG`, `Slate`, `SlateCore`, `InputCore` (for `EKeys` in cli
 - **Stack merging edge case**: When adding an item that matches an existing stack, if the existing stack can't absorb the full quantity, the remainder must go to a new slot. TryAddItem must handle partial stacking across multiple slots.
 - **Cross-inventory moves must be atomic**: TryMoveItem validates the target can accept BEFORE removing from source. If validation passes, remove from source and add to target in one logical operation. If either fails, rollback.
 - **Item GUIDs are server-generated only**: Clients never create FItemInstance — they always receive them via replication or RPCs. This prevents GUID collisions.
+
+## Crafting (feature 8)
+
+- `UCraftingRecipe` (`Data/`, primary asset type `CraftingRecipe` — the project's AssetManager must scan it like
+  `ItemDefinition`): `Ingredients[] {ItemId, Count}`, `OutputItemId`, `OutputCount`, `RequiredStationTag`
+  (`Crafting.Station.*`, empty = by hand), `SortOrder`.
+- `UCraftingSubsystem` (game instance): `GetRecipesForStation(Tag)` (hand recipes + the station's),
+  `CanCraft(Inventory, Recipe, StationTag)` → `ECraftResult`, authority `Craft(...)`: removes the ingredients across
+  stacks (`RemoveItemsById`), creates the output through the item database, adds it, and puts the ingredients back
+  when it does not fit (`NoRoomForOutput`). Pure rules `StationSatisfies` / `CheckIngredients` are tested without a
+  database (`Crafting.*`). Consumers validate the station (distance, tag) before calling, inside a server RPC.
+- `UItemFragment_Placeable`: `ActorClass`, `PlaceDistance`, `MaxSlopeDegrees` (`AcceptsGround`), `PlacementOffsetZ`,
+  `bConsumeOnPlace`. The character's use path traces the ground and spawns the actor on the authority.
