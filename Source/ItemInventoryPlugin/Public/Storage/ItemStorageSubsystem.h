@@ -45,6 +45,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Item Storage")
 	void SaveAll();
 
+	/** The configured backend (local / remote), for systems that store their own documents through it (feature 9). */
+	UFUNCTION(BlueprintPure, Category = "Item Storage")
+	TScriptInterface<ICGFItemStorageInterface> GetStorageBackend() const { return StorageBackend; }
+
 private:
 	/** Auto-save timer callback */
 	void OnAutoSaveTick();

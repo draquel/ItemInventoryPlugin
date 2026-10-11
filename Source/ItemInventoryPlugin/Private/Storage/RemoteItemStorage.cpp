@@ -211,6 +211,41 @@ void URemoteItemStorage::LoadInventoryAsync(const FString& OwnerId,
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Blobs (feature 9)
+// ---------------------------------------------------------------------------
+
+bool URemoteItemStorage::SaveBlob_Implementation(const FString& Key, const FString& Json)
+{
+	TSharedRef<IHttpRequest> Request = CreateRequest(TEXT("POST"), TEXT("blobs/") + Key);
+	Request->SetContentAsString(Json);
+	Request->OnProcessRequestComplete().BindLambda([Key](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk)
+	{
+		UE_LOG(LogTemp, Log, TEXT("RemoteItemStorage: blob '%s' save %s (%d)"), *Key, bOk ? TEXT("ok") : TEXT("FAILED"), Response.IsValid() ? Response->GetResponseCode() : 0);
+	});
+	Request->ProcessRequest();
+	return true;
+}
+
+bool URemoteItemStorage::LoadBlob_Implementation(const FString& Key, FString& OutJson)
+{
+	OutJson.Reset();
+	UE_LOG(LogTemp, Warning, TEXT("RemoteItemStorage: synchronous LoadBlob('%s') is not supported; use a local backend for world saves until the async path exists."), *Key);
+	return false;
+}
+
+bool URemoteItemStorage::DeleteBlob_Implementation(const FString& Key)
+{
+	TSharedRef<IHttpRequest> Request = CreateRequest(TEXT("DELETE"), TEXT("blobs/") + Key);
+	Request->ProcessRequest();
+	return true;
+}
+
+bool URemoteItemStorage::HasBlob_Implementation(const FString& Key)
+{
+	return false;
+}
+
 FString URemoteItemStorage::GetEndpointURL(const FString& OwnerId)
 {
 	const UItemSystemSettings* Settings = GetDefault<UItemSystemSettings>();

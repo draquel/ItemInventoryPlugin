@@ -348,6 +348,8 @@ It processes guaranteed entries first, then rolls RollCount times on the weighte
 
 **IItemStorage** implementations:
 
+Blobs (feature 9): `SaveBlob / LoadBlob / DeleteBlob / HasBlob(Key)` store opaque JSON documents — `ULocalItemStorage` under `Saved/SaveGames/Worlds/<Key>.json` (keys sanitised to file names, atomic writes), `URemoteItemStorage` as fire-and-forget `POST/DELETE <endpoint>/blobs/<Key>` (synchronous Load / Has return false until an async path exists). `UItemStorageSubsystem::GetStorageBackend()` hands the backend to the world save system. Test `ItemStorage.Blob.LocalRoundTrip`.
+
 `ULocalItemStorage` — Serializes to JSON files in the SaveGames directory. One file per inventory owner (keyed by owner ID string). Uses `FJsonObjectConverter` for struct serialization. Synchronous for local saves, but the async interface wraps it in a game thread callback for API consistency.
 
 `URemoteItemStorage` — Sends JSON payloads via `FHttpModule` to a configurable endpoint. Supports POST (save), GET (load), DELETE (delete). Auth token configurable via project settings. Retry logic with exponential backoff. This is a starting point — real projects will likely subclass or replace this with their specific backend integration.
