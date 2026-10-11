@@ -2,6 +2,7 @@
 
 #include "UI/InventorySlotWidget.h"
 #include "Components/InventoryComponent.h"
+#include "UI/ItemTooltipWidget.h"
 #include "Data/ItemDefinition.h"
 #include "Subsystems/ItemDatabaseSubsystem.h"
 #include "Types/CGFItemTypes.h"
@@ -14,6 +15,24 @@
 #include "Engine/AssetManager.h"
 #include "Engine/Texture2D.h"
 #include "Blueprint/WidgetTree.h"
+
+void UInventorySlotWidget::UpdateTooltip(const UItemDefinition* Definition, const FItemInstance& Item)
+{
+	if (!Definition)
+	{
+		SetToolTip(nullptr);
+		return;
+	}
+	if (!ItemTooltip)
+	{
+		ItemTooltip = CreateWidget<UItemTooltipWidget>(this, UItemTooltipWidget::StaticClass());
+	}
+	if (ItemTooltip)
+	{
+		ItemTooltip->SetItem(Definition, Item);
+		SetToolTip(ItemTooltip);
+	}
+}
 
 void UInventorySlotWidget::NativeOnInitialized()
 {
@@ -156,6 +175,7 @@ void UInventorySlotWidget::RefreshSlot()
 		{
 			StackCountText->SetVisibility(ESlateVisibility::Collapsed);
 		}
+		UpdateTooltip(nullptr, Item);
 		return;
 	}
 
@@ -198,6 +218,7 @@ void UInventorySlotWidget::RefreshSlot()
 	}
 
 	const UItemDefinition* Def = ItemDB->GetDefinition(Item.ItemDefinitionId);
+	UpdateTooltip(Def, Item);
 	if (!Def)
 	{
 		// Definition not found — show placeholder
