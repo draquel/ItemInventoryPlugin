@@ -20,6 +20,13 @@ public:
 	virtual bool SaveInventory_Implementation(const FString& OwnerId, const TArray<FItemInstance>& Items) override;
 	virtual TArray<FItemInstance> LoadInventory_Implementation(const FString& OwnerId) override;
 	virtual bool DeleteInventory_Implementation(const FString& OwnerId) override;
+	virtual bool SaveBlob_Implementation(const FString& Key, const FString& Json) override;
+	virtual bool LoadBlob_Implementation(const FString& Key, FString& OutJson) override;
+	virtual bool DeleteBlob_Implementation(const FString& Key) override;
+	virtual bool HasBlob_Implementation(const FString& Key) override;
+
+	/** [Saved]/SaveGames/Worlds/<Key>.json — where blobs (world saves) live. */
+	static FString GetBlobPath(const FString& Key);
 	virtual void SaveInventoryAsync(const FString& OwnerId, const TArray<FItemInstance>& Items,
 		const FOnStorageComplete& Callback) override;
 	virtual void LoadInventoryAsync(const FString& OwnerId,

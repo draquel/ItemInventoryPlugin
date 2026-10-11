@@ -152,6 +152,77 @@ void ULocalItemStorage::LoadInventoryAsync(const FString& OwnerId,
 }
 
 // ---------------------------------------------------------------------------
+// ICGFItemStorageInterface — Blobs (feature 9)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+	bool WriteFileAtomically(const FString& FinalPath, const FString& Contents)
+	{
+		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+		const FString Dir = FPaths::GetPath(FinalPath);
+		if (!PlatformFile.DirectoryExists(*Dir))
+		{
+			PlatformFile.CreateDirectoryTree(*Dir);
+		}
+		const FString TempPath = FinalPath + TEXT(".tmp");
+		if (!FFileHelper::SaveStringToFile(Contents, *TempPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			return false;
+		}
+		if (PlatformFile.FileExists(*FinalPath))
+		{
+			PlatformFile.DeleteFile(*FinalPath);
+		}
+		if (!PlatformFile.MoveFile(*FinalPath, *TempPath))
+		{
+			PlatformFile.DeleteFile(*TempPath);
+			return false;
+		}
+		return true;
+	}
+}
+
+FString ULocalItemStorage::GetBlobPath(const FString& Key)
+{
+	// Keys are file names: keep them to a safe character set.
+	FString Safe = Key;
+	for (TCHAR& C : Safe)
+	{
+		if (!FChar::IsAlnum(C) && C != TEXT('_') && C != TEXT('-') && C != TEXT('.'))
+		{
+			C = TEXT('_');
+		}
+	}
+	return FPaths::ProjectSavedDir() / TEXT("SaveGames") / TEXT("Worlds") / (Safe + TEXT(".json"));
+}
+
+bool ULocalItemStorage::SaveBlob_Implementation(const FString& Key, const FString& Json)
+{
+	const bool bOk = WriteFileAtomically(GetBlobPath(Key), Json);
+	UE_LOG(LogTemp, Log, TEXT("LocalItemStorage: %s blob '%s' (%d chars) -> %s"), bOk ? TEXT("saved") : TEXT("FAILED to save"), *Key, Json.Len(), *GetBlobPath(Key));
+	return bOk;
+}
+
+bool ULocalItemStorage::LoadBlob_Implementation(const FString& Key, FString& OutJson)
+{
+	OutJson.Reset();
+	return FFileHelper::LoadFileToString(OutJson, *GetBlobPath(Key));
+}
+
+bool ULocalItemStorage::DeleteBlob_Implementation(const FString& Key)
+{
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	const FString Path = GetBlobPath(Key);
+	return PlatformFile.FileExists(*Path) && PlatformFile.DeleteFile(*Path);
+}
+
+bool ULocalItemStorage::HasBlob_Implementation(const FString& Key)
+{
+	return FPlatformFileManager::Get().GetPlatformFile().FileExists(*GetBlobPath(Key));
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
