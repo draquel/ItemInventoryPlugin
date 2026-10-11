@@ -13,6 +13,9 @@ class UTextBlock;
 class USizeBox;
 class UOverlay;
 class UTexture2D;
+class UItemTooltipWidget;
+class UItemDefinition;
+struct FItemInstance;
 
 /** Fired when an inventory slot is clicked. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventorySlotClicked, int32, SlotIndex, UInventoryComponent*, Inventory);
@@ -131,4 +134,11 @@ private:
 
 	/** Handle for async icon loading. */
 	TSharedPtr<FStreamableHandle> IconLoadHandle;
+
+	/** Hover tooltip for the slot's item (created on first use, refreshed with the slot). */
+	UPROPERTY()
+	TObjectPtr<UItemTooltipWidget> ItemTooltip;
+
+	/** Show Item's tooltip on hover, or clear it (null definition). */
+	void UpdateTooltip(const UItemDefinition* Definition, const FItemInstance& Item);
 };

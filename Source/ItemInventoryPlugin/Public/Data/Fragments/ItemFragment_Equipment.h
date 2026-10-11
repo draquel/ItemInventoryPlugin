@@ -26,6 +26,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Visuals")
 	TSubclassOf<UAnimInstance> AnimLayerClass;
 
+	/**
+	 * Per-item fit of the equipped mesh, in the slot's corrected frame (applied before the slot's AttachOffset): nudge a
+	 * helmet down onto the head, scale a bulky chest piece. Identity for most items.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Visuals")
+	FTransform AttachOffset = FTransform::Identity;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
