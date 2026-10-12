@@ -98,6 +98,7 @@ void UInventoryPanelWidget::InitPanel(UInventoryComponent* InInventory, int32 St
 			SlotWidget->InitSlot(BoundInventory, InventorySlotIndex);
 			SlotWidget->OnSlotClicked.AddDynamic(this, &UInventoryPanelWidget::HandleChildSlotClicked);
 			SlotWidget->OnSlotRightClicked.AddDynamic(this, &UInventoryPanelWidget::HandleChildSlotRightClicked);
+		SlotWidget->OnSlotDoubleClicked.AddDynamic(this, &UInventoryPanelWidget::HandleChildSlotDoubleClicked);
 			GridPanel->AddChildToUniformGrid(SlotWidget, Row, Col);
 			SlotWidgets.Add(SlotWidget);
 		}
@@ -128,6 +129,11 @@ void UInventoryPanelWidget::SetSlotHeld(int32 InSlotIndex, bool bHeld)
 void UInventoryPanelWidget::HandleChildSlotClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)
 {
 	OnSlotClicked.Broadcast(ChildSlotIndex, Inventory);
+}
+
+void UInventoryPanelWidget::HandleChildSlotDoubleClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)
+{
+	OnSlotDoubleClicked.Broadcast(ChildSlotIndex, Inventory);
 }
 
 void UInventoryPanelWidget::HandleChildSlotRightClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory)

@@ -336,6 +336,17 @@ void UInventorySlotWidget::SetHeld(bool bInHeld)
 	}
 }
 
+FReply UInventorySlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// The first press of a double-click already arrived as a click; the second arrives here instead.
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnSlotDoubleClicked.Broadcast(SlotIndex, BoundInventory);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonDoubleClick(InGeometry, InMouseEvent);
+}
+
 FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
