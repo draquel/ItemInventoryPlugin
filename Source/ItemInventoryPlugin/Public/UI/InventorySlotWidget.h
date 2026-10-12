@@ -89,10 +89,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "InventorySlot")
 	FOnInventorySlotClicked OnSlotRightClicked;
 
+	/** Fired when this slot is double-clicked with the left button (equip / use it; QA R18). */
+	UPROPERTY(BlueprintAssignable, Category = "InventorySlot")
+	FOnInventorySlotClicked OnSlotDoubleClicked;
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
 	/** Build the Slate widget tree programmatically. */

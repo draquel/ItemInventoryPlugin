@@ -68,6 +68,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Hotbar")
 	FOnInventorySlotClicked OnSlotRightClicked;
 
+	/** Relayed when any child slot is double-clicked. */
+	UPROPERTY(BlueprintAssignable, Category = "Hotbar")
+	FOnInventorySlotClicked OnSlotDoubleClicked;
+
 protected:
 	virtual void NativeOnInitialized() override;
 
@@ -79,6 +83,9 @@ private:
 
 	UFUNCTION()
 	void HandleChildSlotRightClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory);
+
+	UFUNCTION()
+	void HandleChildSlotDoubleClicked(int32 ChildSlotIndex, UInventoryComponent* Inventory);
 
 	UPROPERTY()
 	TObjectPtr<UBorder> RootBorder;
