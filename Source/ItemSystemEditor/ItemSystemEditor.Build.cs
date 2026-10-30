@@ -18,11 +18,8 @@ public class ItemSystemEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd",
-			"EditorStyle",
 			"ItemInventoryPlugin",
 			"CommonGameFramework",
-			"InputCore",
-			"PropertyEditor",
 			"AssetRegistry",
 			"GameplayTags",
 			"ToolMenus",

@@ -55,9 +55,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
 	int32 SortOrder = 0;
 
-	/** True when the recipe needs a station. */
-	bool RequiresStation() const { return RequiredStationTag.IsValid(); }
-
 	/** True when the recipe has an output and at least one ingredient. */
 	bool IsUsable() const { return OutputItemId.IsValid() && OutputCount > 0 && Ingredients.Num() > 0; }
 
