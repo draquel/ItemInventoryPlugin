@@ -14,7 +14,6 @@ public class ItemInventoryPlugin : ModuleRules
 			"NetCore",
 			"GameplayTags",
 			"GameplayAbilities",
-			"GameplayTasks",
 			"CommonGameFramework",
 		});
 
@@ -22,7 +21,6 @@ public class ItemInventoryPlugin : ModuleRules
 		{
 			"HTTP",
 			"Json",
-			"JsonUtilities",
 			"Niagara",
 			"DeveloperSettings",
 			"UMG",

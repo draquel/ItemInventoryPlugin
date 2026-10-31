@@ -51,25 +51,6 @@ bool UItemDatabaseSubsystem::HasDefinition(FPrimaryAssetId AssetId) const
 	return DefinitionCache.Contains(AssetId);
 }
 
-void UItemDatabaseSubsystem::LoadDefinitionAsync(FPrimaryAssetId AssetId, FStreamableDelegate OnLoaded)
-{
-	UAssetManager& AssetManager = UAssetManager::Get();
-
-	AssetManager.LoadPrimaryAsset(AssetId, TArray<FName>(),
-		FStreamableDelegate::CreateLambda([this, AssetId, OnLoaded]()
-		{
-			UAssetManager& AM = UAssetManager::Get();
-			UObject* LoadedAsset = AM.GetPrimaryAssetObject(AssetId);
-			UItemDefinition* Definition = Cast<UItemDefinition>(LoadedAsset);
-			if (Definition)
-			{
-				DefinitionCache.Add(AssetId, Definition);
-			}
-			OnLoaded.ExecuteIfBound();
-		})
-	);
-}
-
 void UItemDatabaseSubsystem::RegisterDefinition(FPrimaryAssetId AssetId, UItemDefinition* Definition)
 {
 	if (!AssetId.IsValid())

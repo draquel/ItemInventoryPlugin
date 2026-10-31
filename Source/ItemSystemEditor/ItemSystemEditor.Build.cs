@@ -13,16 +13,14 @@ public class ItemSystemEditor : ModuleRules
 			"Engine",
 			"Slate",
 			"SlateCore",
+			"InputCore", // linked, not included: SListView's key handling reaches EKeys
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd",
-			"EditorStyle",
 			"ItemInventoryPlugin",
 			"CommonGameFramework",
-			"InputCore",
-			"PropertyEditor",
 			"AssetRegistry",
 			"GameplayTags",
 			"ToolMenus",

@@ -37,9 +37,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Item Database")
 	bool HasDefinition(FPrimaryAssetId AssetId) const;
 
-	/** Async load a definition that may not be in memory yet */
-	void LoadDefinitionAsync(FPrimaryAssetId AssetId, FStreamableDelegate OnLoaded);
-
 	/** Register a programmatic definition (for testing/runtime-created items) */
 	UFUNCTION(BlueprintCallable, Category = "Item Database")
 	void RegisterDefinition(FPrimaryAssetId AssetId, UItemDefinition* Definition);
