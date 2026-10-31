@@ -1,4 +1,5 @@
 #include "Storage/ItemStorageSubsystem.h"
+#include "ItemInventoryPlugin.h"
 #include "Storage/ItemSystemSettings.h"
 #include "Storage/LocalItemStorage.h"
 #include "Storage/RemoteItemStorage.h"
@@ -24,7 +25,7 @@ void UItemStorageSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			URemoteItemStorage* Remote = NewObject<URemoteItemStorage>(this);
 			StorageBackend.SetObject(Remote);
 			StorageBackend.SetInterface(Cast<ICGFItemStorageInterface>(Remote));
-			UE_LOG(LogTemp, Log, TEXT("ItemStorageSubsystem: Using Remote storage backend"));
+			UE_LOG(LogIIP, Log, TEXT("ItemStorageSubsystem: Using Remote storage backend"));
 		}
 		break;
 
@@ -34,7 +35,7 @@ void UItemStorageSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			ULocalItemStorage* Local = NewObject<ULocalItemStorage>(this);
 			StorageBackend.SetObject(Local);
 			StorageBackend.SetInterface(Cast<ICGFItemStorageInterface>(Local));
-			UE_LOG(LogTemp, Log, TEXT("ItemStorageSubsystem: Using Local storage backend"));
+			UE_LOG(LogIIP, Log, TEXT("ItemStorageSubsystem: Using Local storage backend"));
 		}
 		break;
 	}
@@ -46,7 +47,7 @@ void UItemStorageSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		{
 			World->GetTimerManager().SetTimer(AutoSaveTimerHandle, FTimerDelegate::CreateUObject(this, &UItemStorageSubsystem::OnAutoSaveTick),
 				Settings->AutoSaveIntervalSeconds, true);
-			UE_LOG(LogTemp, Log, TEXT("ItemStorageSubsystem: Auto-save enabled (interval: %.1fs)"),
+			UE_LOG(LogIIP, Log, TEXT("ItemStorageSubsystem: Auto-save enabled (interval: %.1fs)"),
 				Settings->AutoSaveIntervalSeconds);
 		}
 	}
@@ -100,7 +101,7 @@ void UItemStorageSubsystem::RegisterInventory(UInventoryComponent* Component, co
 	Entry.OwnerId = OwnerId;
 	RegisteredInventories.Add(MoveTemp(Entry));
 
-	UE_LOG(LogTemp, Verbose, TEXT("ItemStorageSubsystem: Registered inventory '%s'"), *OwnerId);
+	UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Registered inventory '%s'"), *OwnerId);
 }
 
 void UItemStorageSubsystem::UnregisterInventory(UInventoryComponent* Component)
@@ -123,7 +124,7 @@ void UItemStorageSubsystem::UnregisterInventory(UInventoryComponent* Component)
 				Component->ClearDirty();
 			}
 
-			UE_LOG(LogTemp, Verbose, TEXT("ItemStorageSubsystem: Unregistered inventory '%s'"),
+			UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Unregistered inventory '%s'"),
 				*RegisteredInventories[i].OwnerId);
 			RegisteredInventories.RemoveAt(i);
 			break;
@@ -154,7 +155,7 @@ void UItemStorageSubsystem::SaveInventory(UInventoryComponent* Component)
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("ItemStorageSubsystem: SaveInventory called for unregistered component"));
+	UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: SaveInventory called for unregistered component"));
 }
 
 void UItemStorageSubsystem::LoadInventory(UInventoryComponent* Component, const FString& OwnerId)
@@ -170,7 +171,7 @@ void UItemStorageSubsystem::LoadInventory(UInventoryComponent* Component, const 
 	ApplyItemsToComponent(Component, Items);
 	Component->ClearDirty();
 
-	UE_LOG(LogTemp, Verbose, TEXT("ItemStorageSubsystem: Loaded %d items for '%s'"), Items.Num(), *OwnerId);
+	UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Loaded %d items for '%s'"), Items.Num(), *OwnerId);
 }
 
 void UItemStorageSubsystem::SaveAll()
@@ -195,7 +196,7 @@ void UItemStorageSubsystem::SaveAll()
 
 	if (SaveCount > 0)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("ItemStorageSubsystem: SaveAll saved %d inventories"), SaveCount);
+		UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: SaveAll saved %d inventories"), SaveCount);
 	}
 }
 

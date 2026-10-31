@@ -1,4 +1,5 @@
 #include "Subsystems/CraftingSubsystem.h"
+#include "ItemInventoryPlugin.h"
 #include "Components/InventoryComponent.h"
 #include "Data/CraftingRecipe.h"
 #include "Subsystems/ItemDatabaseSubsystem.h"
@@ -27,7 +28,7 @@ void UCraftingSubsystem::ScanForRecipes()
 			RecipeCache.Add(AssetId, Recipe);
 		}
 	}
-	UE_LOG(LogTemp, Log, TEXT("CraftingSubsystem: scanned %d recipe(s)"), RecipeCache.Num());
+	UE_LOG(LogIIP, Log, TEXT("CraftingSubsystem: scanned %d recipe(s)"), RecipeCache.Num());
 }
 
 TArray<UCraftingRecipe*> UCraftingSubsystem::GetAllRecipes() const

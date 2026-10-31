@@ -1,6 +1,7 @@
 // Copyright Daniel Raquel. All Rights Reserved.
 
 #include "UI/HotbarWidget.h"
+#include "ItemInventoryPlugin.h"
 #include "UI/InventorySlotWidget.h"
 #include "Components/InventoryComponent.h"
 #include "Components/Border.h"
@@ -10,8 +11,6 @@
 #include "Components/OverlaySlot.h"
 #include "Components/TextBlock.h"
 #include "Blueprint/WidgetTree.h"
-
-DEFINE_LOG_CATEGORY_STATIC(LogHotbarWidget, Log, All);
 
 void UHotbarWidget::NativeOnInitialized()
 {
@@ -23,7 +22,7 @@ void UHotbarWidget::BuildWidgetTree()
 {
 	if (!WidgetTree)
 	{
-		UE_LOG(LogHotbarWidget, Error, TEXT("BuildWidgetTree: No WidgetTree"));
+		UE_LOG(LogIIP, Error, TEXT("BuildWidgetTree: No WidgetTree"));
 		return;
 	}
 
@@ -38,7 +37,7 @@ void UHotbarWidget::BuildWidgetTree()
 	SlotContainer = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("SlotContainer"));
 	RootBorder->AddChild(SlotContainer);
 
-	UE_LOG(LogHotbarWidget, Log, TEXT("BuildWidgetTree: Root=%s, SlotContainer=%s"),
+	UE_LOG(LogIIP, Log, TEXT("BuildWidgetTree: Root=%s, SlotContainer=%s"),
 		*RootBorder->GetName(), *SlotContainer->GetName());
 }
 
@@ -47,14 +46,14 @@ void UHotbarWidget::InitHotbar(UInventoryComponent* InInventory, int32 NumSlots)
 	BoundInventory = InInventory;
 	CachedNumSlots = FMath::Max(1, NumSlots);
 
-	UE_LOG(LogHotbarWidget, Log, TEXT("InitHotbar: Inventory=%s, NumSlots=%d, SlotContainer=%s"),
+	UE_LOG(LogIIP, Log, TEXT("InitHotbar: Inventory=%s, NumSlots=%d, SlotContainer=%s"),
 		InInventory ? *InInventory->GetName() : TEXT("null"),
 		CachedNumSlots,
 		SlotContainer ? TEXT("valid") : TEXT("NULL"));
 
 	if (!SlotContainer)
 	{
-		UE_LOG(LogHotbarWidget, Error, TEXT("InitHotbar: SlotContainer is null — BuildWidgetTree may not have run"));
+		UE_LOG(LogIIP, Error, TEXT("InitHotbar: SlotContainer is null — BuildWidgetTree may not have run"));
 		return;
 	}
 
@@ -74,7 +73,7 @@ void UHotbarWidget::InitHotbar(UInventoryComponent* InInventory, int32 NumSlots)
 		UInventorySlotWidget* SlotWidget = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), ClassToUse);
 		if (!SlotWidget)
 		{
-			UE_LOG(LogHotbarWidget, Error, TEXT("InitHotbar: Failed to create slot widget %d"), i);
+			UE_LOG(LogIIP, Error, TEXT("InitHotbar: Failed to create slot widget %d"), i);
 			continue;
 		}
 
@@ -93,7 +92,7 @@ void UHotbarWidget::InitHotbar(UInventoryComponent* InInventory, int32 NumSlots)
 		}
 	}
 
-	UE_LOG(LogHotbarWidget, Log, TEXT("InitHotbar: Created %d slot widgets"), SlotWidgets.Num());
+	UE_LOG(LogIIP, Log, TEXT("InitHotbar: Created %d slot widgets"), SlotWidgets.Num());
 }
 
 void UHotbarWidget::SetActiveSlot(int32 NewActiveSlot)

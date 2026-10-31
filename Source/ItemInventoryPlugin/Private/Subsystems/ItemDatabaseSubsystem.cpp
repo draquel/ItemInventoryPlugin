@@ -1,4 +1,5 @@
 #include "Subsystems/ItemDatabaseSubsystem.h"
+#include "ItemInventoryPlugin.h"
 #include "Data/ItemDefinition.h"
 #include "Engine/AssetManager.h"
 
@@ -30,7 +31,7 @@ void UItemDatabaseSubsystem::ScanForDefinitions()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("ItemDatabaseSubsystem: Scanned %d item definitions"), DefinitionCache.Num());
+	UE_LOG(LogIIP, Log, TEXT("ItemDatabaseSubsystem: Scanned %d item definitions"), DefinitionCache.Num());
 }
 
 UItemDefinition* UItemDatabaseSubsystem::GetDefinition(FPrimaryAssetId AssetId) const
@@ -55,16 +56,16 @@ void UItemDatabaseSubsystem::RegisterDefinition(FPrimaryAssetId AssetId, UItemDe
 {
 	if (!AssetId.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemDatabaseSubsystem::RegisterDefinition: Invalid AssetId"));
+		UE_LOG(LogIIP, Warning, TEXT("ItemDatabaseSubsystem::RegisterDefinition: Invalid AssetId"));
 		return;
 	}
 	if (!Definition)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemDatabaseSubsystem::RegisterDefinition: Null Definition for %s"), *AssetId.ToString());
+		UE_LOG(LogIIP, Warning, TEXT("ItemDatabaseSubsystem::RegisterDefinition: Null Definition for %s"), *AssetId.ToString());
 		return;
 	}
 	DefinitionCache.Add(AssetId, Definition);
-	UE_LOG(LogTemp, Log, TEXT("ItemDatabaseSubsystem: Registered definition %s"), *AssetId.ToString());
+	UE_LOG(LogIIP, Log, TEXT("ItemDatabaseSubsystem: Registered definition %s"), *AssetId.ToString());
 }
 
 FItemInstance UItemDatabaseSubsystem::CreateItemInstance(FPrimaryAssetId AssetId, int32 StackCount)
@@ -74,7 +75,7 @@ FItemInstance UItemDatabaseSubsystem::CreateItemInstance(FPrimaryAssetId AssetId
 	UItemDefinition* Definition = GetDefinition(AssetId);
 	if (!Definition)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemDatabaseSubsystem::CreateItemInstance: Definition not found for %s"), *AssetId.ToString());
+		UE_LOG(LogIIP, Warning, TEXT("ItemDatabaseSubsystem::CreateItemInstance: Definition not found for %s"), *AssetId.ToString());
 		return Instance;
 	}
 

@@ -1,4 +1,5 @@
 #include "Subsystems/LootGenerationSubsystem.h"
+#include "ItemInventoryPlugin.h"
 #include "Subsystems/ItemDatabaseSubsystem.h"
 #include "Data/LootTable.h"
 #include "Data/LootEntry.h"
@@ -39,7 +40,7 @@ void ULootGenerationSubsystem::GenerateLootInternal(ULootTable* Table, FLootCont
 	{
 		if (Depth >= MaxRecursionDepth)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("LootGenerationSubsystem: Max recursion depth (%d) reached."),
+			UE_LOG(LogIIP, Warning, TEXT("LootGenerationSubsystem: Max recursion depth (%d) reached."),
 				MaxRecursionDepth);
 		}
 		return;
