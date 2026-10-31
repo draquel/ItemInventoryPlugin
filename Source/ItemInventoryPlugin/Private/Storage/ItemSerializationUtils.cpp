@@ -1,4 +1,5 @@
 #include "Storage/ItemSerializationUtils.h"
+#include "ItemInventoryPlugin.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonWriter.h"
@@ -48,7 +49,7 @@ bool FItemSerializationUtils::DeserializeInventory(const FString& JsonString, FS
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
 	if (!FJsonSerializer::Deserialize(Reader, RootObj) || !RootObj.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemSerializationUtils: Failed to parse JSON"));
+		UE_LOG(LogIIP, Warning, TEXT("ItemSerializationUtils: Failed to parse JSON"));
 		return false;
 	}
 
@@ -56,7 +57,7 @@ bool FItemSerializationUtils::DeserializeInventory(const FString& JsonString, FS
 	RootObj->TryGetNumberField(TEXT("version"), Version);
 	if (Version != SERIALIZATION_VERSION)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemSerializationUtils: Unsupported version %d (expected %d)"),
+		UE_LOG(LogIIP, Warning, TEXT("ItemSerializationUtils: Unsupported version %d (expected %d)"),
 			Version, SERIALIZATION_VERSION);
 		return false;
 	}
@@ -207,7 +208,7 @@ UItemInstanceFragment* FItemSerializationUtils::DeserializeFragment(const TShare
 	FString ClassPath;
 	if (!JsonObj->TryGetStringField(TEXT("fragmentClass"), ClassPath))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemSerializationUtils: Fragment missing fragmentClass"));
+		UE_LOG(LogIIP, Warning, TEXT("ItemSerializationUtils: Fragment missing fragmentClass"));
 		return nullptr;
 	}
 
@@ -219,7 +220,7 @@ UItemInstanceFragment* FItemSerializationUtils::DeserializeFragment(const TShare
 	}
 	if (!FragmentClass || !FragmentClass->IsChildOf(UItemInstanceFragment::StaticClass()))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemSerializationUtils: Could not find fragment class '%s'"), *ClassPath);
+		UE_LOG(LogIIP, Warning, TEXT("ItemSerializationUtils: Could not find fragment class '%s'"), *ClassPath);
 		return nullptr;
 	}
 

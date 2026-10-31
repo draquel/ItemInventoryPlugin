@@ -1,4 +1,5 @@
 #include "Storage/LocalItemStorage.h"
+#include "ItemInventoryPlugin.h"
 #include "Storage/ItemSerializationUtils.h"
 #include "Misc/FileHelper.h"
 #include "HAL/PlatformFileManager.h"
@@ -19,7 +20,7 @@ bool ULocalItemStorage::SaveInventory_Implementation(const FString& OwnerId, con
 	// Atomic write: write to temp file, then rename
 	if (!FFileHelper::SaveStringToFile(JsonString, *TempPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalItemStorage: Failed to write temp file '%s'"), *TempPath);
+		UE_LOG(LogIIP, Warning, TEXT("LocalItemStorage: Failed to write temp file '%s'"), *TempPath);
 		return false;
 	}
 
@@ -33,13 +34,13 @@ bool ULocalItemStorage::SaveInventory_Implementation(const FString& OwnerId, con
 
 	if (!PlatformFile.MoveFile(*FinalPath, *TempPath))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalItemStorage: Failed to rename '%s' to '%s'"), *TempPath, *FinalPath);
+		UE_LOG(LogIIP, Warning, TEXT("LocalItemStorage: Failed to rename '%s' to '%s'"), *TempPath, *FinalPath);
 		// Clean up temp file
 		PlatformFile.DeleteFile(*TempPath);
 		return false;
 	}
 
-	UE_LOG(LogTemp, Verbose, TEXT("LocalItemStorage: Saved inventory for '%s' (%d items)"), *OwnerId, Items.Num());
+	UE_LOG(LogIIP, Verbose, TEXT("LocalItemStorage: Saved inventory for '%s' (%d items)"), *OwnerId, Items.Num());
 	return true;
 }
 
@@ -51,18 +52,18 @@ TArray<FItemInstance> ULocalItemStorage::LoadInventory_Implementation(const FStr
 	FString JsonString;
 	if (!FFileHelper::LoadFileToString(JsonString, *FilePath))
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("LocalItemStorage: No save file for '%s' at '%s'"), *OwnerId, *FilePath);
+		UE_LOG(LogIIP, Verbose, TEXT("LocalItemStorage: No save file for '%s' at '%s'"), *OwnerId, *FilePath);
 		return Items;
 	}
 
 	FString LoadedOwnerId;
 	if (!FItemSerializationUtils::DeserializeInventory(JsonString, LoadedOwnerId, Items, GetTransientPackage()))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LocalItemStorage: Failed to deserialize inventory for '%s'"), *OwnerId);
+		UE_LOG(LogIIP, Warning, TEXT("LocalItemStorage: Failed to deserialize inventory for '%s'"), *OwnerId);
 		Items.Empty();
 	}
 
-	UE_LOG(LogTemp, Verbose, TEXT("LocalItemStorage: Loaded inventory for '%s' (%d items)"), *OwnerId, Items.Num());
+	UE_LOG(LogIIP, Verbose, TEXT("LocalItemStorage: Loaded inventory for '%s' (%d items)"), *OwnerId, Items.Num());
 	return Items;
 }
 
@@ -200,7 +201,7 @@ FString ULocalItemStorage::GetBlobPath(const FString& Key)
 bool ULocalItemStorage::SaveBlob_Implementation(const FString& Key, const FString& Json)
 {
 	const bool bOk = WriteFileAtomically(GetBlobPath(Key), Json);
-	UE_LOG(LogTemp, Log, TEXT("LocalItemStorage: %s blob '%s' (%d chars) -> %s"), bOk ? TEXT("saved") : TEXT("FAILED to save"), *Key, Json.Len(), *GetBlobPath(Key));
+	UE_LOG(LogIIP, Log, TEXT("LocalItemStorage: %s blob '%s' (%d chars) -> %s"), bOk ? TEXT("saved") : TEXT("FAILED to save"), *Key, Json.Len(), *GetBlobPath(Key));
 	return bOk;
 }
 

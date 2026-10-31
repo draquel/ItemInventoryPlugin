@@ -1,4 +1,5 @@
 #include "Storage/RemoteItemStorage.h"
+#include "ItemInventoryPlugin.h"
 #include "Storage/ItemSystemSettings.h"
 #include "Storage/ItemSerializationUtils.h"
 #include "HttpModule.h"
@@ -50,13 +51,13 @@ bool URemoteItemStorage::SaveInventory_Implementation(const FString& OwnerId, co
 		{
 			// Exponential backoff: 1s, 2s, 4s...
 			const float Delay = FMath::Pow(2.0f, static_cast<float>(Attempt));
-			UE_LOG(LogTemp, Warning, TEXT("RemoteItemStorage: Save attempt %d failed for '%s', retrying in %.0fs"),
+			UE_LOG(LogIIP, Warning, TEXT("RemoteItemStorage: Save attempt %d failed for '%s', retrying in %.0fs"),
 				Attempt + 1, *OwnerId, Delay);
 			FPlatformProcess::Sleep(Delay);
 		}
 	}
 
-	UE_LOG(LogTemp, Error, TEXT("RemoteItemStorage: Failed to save inventory for '%s' after %d attempts"),
+	UE_LOG(LogIIP, Error, TEXT("RemoteItemStorage: Failed to save inventory for '%s' after %d attempts"),
 		*OwnerId, Settings->RemoteMaxRetries + 1);
 	return false;
 }
@@ -100,20 +101,20 @@ TArray<FItemInstance> URemoteItemStorage::LoadInventory_Implementation(const FSt
 			{
 				return Items;
 			}
-			UE_LOG(LogTemp, Warning, TEXT("RemoteItemStorage: Failed to deserialize response for '%s'"), *OwnerId);
+			UE_LOG(LogIIP, Warning, TEXT("RemoteItemStorage: Failed to deserialize response for '%s'"), *OwnerId);
 			return Items;
 		}
 
 		if (Attempt < Settings->RemoteMaxRetries)
 		{
 			const float Delay = FMath::Pow(2.0f, static_cast<float>(Attempt));
-			UE_LOG(LogTemp, Warning, TEXT("RemoteItemStorage: Load attempt %d failed for '%s', retrying in %.0fs"),
+			UE_LOG(LogIIP, Warning, TEXT("RemoteItemStorage: Load attempt %d failed for '%s', retrying in %.0fs"),
 				Attempt + 1, *OwnerId, Delay);
 			FPlatformProcess::Sleep(Delay);
 		}
 	}
 
-	UE_LOG(LogTemp, Error, TEXT("RemoteItemStorage: Failed to load inventory for '%s' after %d attempts"),
+	UE_LOG(LogIIP, Error, TEXT("RemoteItemStorage: Failed to load inventory for '%s' after %d attempts"),
 		*OwnerId, Settings->RemoteMaxRetries + 1);
 	return Items;
 }
@@ -157,7 +158,7 @@ bool URemoteItemStorage::DeleteInventory_Implementation(const FString& OwnerId)
 		}
 	}
 
-	UE_LOG(LogTemp, Error, TEXT("RemoteItemStorage: Failed to delete inventory for '%s'"), *OwnerId);
+	UE_LOG(LogIIP, Error, TEXT("RemoteItemStorage: Failed to delete inventory for '%s'"), *OwnerId);
 	return false;
 }
 
@@ -221,7 +222,7 @@ bool URemoteItemStorage::SaveBlob_Implementation(const FString& Key, const FStri
 	Request->SetContentAsString(Json);
 	Request->OnProcessRequestComplete().BindLambda([Key](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk)
 	{
-		UE_LOG(LogTemp, Log, TEXT("RemoteItemStorage: blob '%s' save %s (%d)"), *Key, bOk ? TEXT("ok") : TEXT("FAILED"), Response.IsValid() ? Response->GetResponseCode() : 0);
+		UE_LOG(LogIIP, Log, TEXT("RemoteItemStorage: blob '%s' save %s (%d)"), *Key, bOk ? TEXT("ok") : TEXT("FAILED"), Response.IsValid() ? Response->GetResponseCode() : 0);
 	});
 	Request->ProcessRequest();
 	return true;
@@ -230,7 +231,7 @@ bool URemoteItemStorage::SaveBlob_Implementation(const FString& Key, const FStri
 bool URemoteItemStorage::LoadBlob_Implementation(const FString& Key, FString& OutJson)
 {
 	OutJson.Reset();
-	UE_LOG(LogTemp, Warning, TEXT("RemoteItemStorage: synchronous LoadBlob('%s') is not supported; use a local backend for world saves until the async path exists."), *Key);
+	UE_LOG(LogIIP, Warning, TEXT("RemoteItemStorage: synchronous LoadBlob('%s') is not supported; use a local backend for world saves until the async path exists."), *Key);
 	return false;
 }
 

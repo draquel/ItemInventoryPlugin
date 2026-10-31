@@ -12,6 +12,8 @@
 #include "Types/CGFItemTypes.h"
 #include "Types/CGFLootTypes.h"
 
+DEFINE_LOG_CATEGORY(LogIIP);
+
 #define LOCTEXT_NAMESPACE "FItemInventoryPluginModule"
 
 namespace
@@ -36,14 +38,14 @@ void FItemInventoryPluginModule::StartupModule()
 			{
 				if (Args.Num() < 1)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Inventory.Give: Usage: Inventory.Give <DefName> [Count=1]"));
+					UE_LOG(LogIIP, Warning, TEXT("Inventory.Give: Usage: Inventory.Give <DefName> [Count=1]"));
 					return;
 				}
 
 				UInventoryComponent* Inventory = FindPlayerInventory(World);
 				if (!Inventory)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Inventory.Give: No player inventory found."));
+					UE_LOG(LogIIP, Warning, TEXT("Inventory.Give: No player inventory found."));
 					return;
 				}
 
@@ -52,7 +54,7 @@ void FItemInventoryPluginModule::StartupModule()
 				UItemDatabaseSubsystem* DB = GI->GetSubsystem<UItemDatabaseSubsystem>();
 				if (!DB)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Inventory.Give: ItemDatabaseSubsystem not available."));
+					UE_LOG(LogIIP, Warning, TEXT("Inventory.Give: ItemDatabaseSubsystem not available."));
 					return;
 				}
 
@@ -68,12 +70,12 @@ void FItemInventoryPluginModule::StartupModule()
 				FItemInstance Item = DB->CreateItemInstance(AssetId, Count);
 				if (!Item.IsValid())
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Inventory.Give: Failed to create item '%s'. Definition not found."), *DefName);
+					UE_LOG(LogIIP, Warning, TEXT("Inventory.Give: Failed to create item '%s'. Definition not found."), *DefName);
 					return;
 				}
 
 				EInventoryOperationResult Result = Inventory->TryAddItem(Item);
-				UE_LOG(LogTemp, Log, TEXT("Inventory.Give: '%s' x%d -> %s"),
+				UE_LOG(LogIIP, Log, TEXT("Inventory.Give: '%s' x%d -> %s"),
 					*DefName, Count,
 					Result == EInventoryOperationResult::Success ? TEXT("Success") : TEXT("Failed"));
 			})
@@ -89,7 +91,7 @@ void FItemInventoryPluginModule::StartupModule()
 				UInventoryComponent* Inventory = FindPlayerInventory(World);
 				if (!Inventory)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Inventory.Clear: No player inventory found."));
+					UE_LOG(LogIIP, Warning, TEXT("Inventory.Clear: No player inventory found."));
 					return;
 				}
 
@@ -111,7 +113,7 @@ void FItemInventoryPluginModule::StartupModule()
 					}
 				}
 
-				UE_LOG(LogTemp, Log, TEXT("Inventory.Clear: Removed %d item(s)."), Cleared);
+				UE_LOG(LogIIP, Log, TEXT("Inventory.Clear: Removed %d item(s)."), Cleared);
 			})
 	));
 
@@ -125,14 +127,14 @@ void FItemInventoryPluginModule::StartupModule()
 				UInventoryComponent* Inventory = FindPlayerInventory(World);
 				if (!Inventory)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Inventory.List: No player inventory found."));
+					UE_LOG(LogIIP, Warning, TEXT("Inventory.List: No player inventory found."));
 					return;
 				}
 
 				UGameInstance* GI = World->GetGameInstance();
 				UItemDatabaseSubsystem* DB = GI ? GI->GetSubsystem<UItemDatabaseSubsystem>() : nullptr;
 
-				UE_LOG(LogTemp, Log, TEXT("=== Inventory (%d/%d slots) ==="),
+				UE_LOG(LogIIP, Log, TEXT("=== Inventory (%d/%d slots) ==="),
 					Inventory->GetFilledSlotCount(), Inventory->MaxSlots);
 
 				for (const FInventorySlot& Slot : Inventory->InventorySlots.Items)
@@ -150,7 +152,7 @@ void FItemInventoryPluginModule::StartupModule()
 					}
 
 					int32 FragmentCount = Slot.Item.InstanceFragments.Num();
-					UE_LOG(LogTemp, Log, TEXT("  [%d] %s  x%d  (%d fragment(s))"),
+					UE_LOG(LogIIP, Log, TEXT("  [%d] %s  x%d  (%d fragment(s))"),
 						Slot.SlotIndex, *ItemName, Slot.Item.StackCount, FragmentCount);
 				}
 			})
@@ -165,7 +167,7 @@ void FItemInventoryPluginModule::StartupModule()
 			{
 				if (Args.Num() < 1)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Loot.Roll: Usage: Loot.Roll <TableAssetPath> [Count=1]"));
+					UE_LOG(LogIIP, Warning, TEXT("Loot.Roll: Usage: Loot.Roll <TableAssetPath> [Count=1]"));
 					return;
 				}
 
@@ -180,27 +182,27 @@ void FItemInventoryPluginModule::StartupModule()
 				ULootTable* Table = Cast<ULootTable>(StaticLoadObject(ULootTable::StaticClass(), nullptr, *TablePath));
 				if (!Table)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Loot.Roll: Failed to load loot table at '%s'."), *TablePath);
+					UE_LOG(LogIIP, Warning, TEXT("Loot.Roll: Failed to load loot table at '%s'."), *TablePath);
 					return;
 				}
 
 				ULootGenerationSubsystem* LootSys = World->GetSubsystem<ULootGenerationSubsystem>();
 				if (!LootSys)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Loot.Roll: LootGenerationSubsystem not available."));
+					UE_LOG(LogIIP, Warning, TEXT("Loot.Roll: LootGenerationSubsystem not available."));
 					return;
 				}
 
-				UE_LOG(LogTemp, Log, TEXT("=== Loot.Roll: %s x%d ==="), *TablePath, Count);
+				UE_LOG(LogIIP, Log, TEXT("=== Loot.Roll: %s x%d ==="), *TablePath, Count);
 
 				for (int32 i = 0; i < Count; ++i)
 				{
 					FLootContext Context;
 					TArray<FItemInstance> Items = LootSys->GenerateLoot(Table, Context);
-					UE_LOG(LogTemp, Log, TEXT("  Roll %d: %d item(s)"), i + 1, Items.Num());
+					UE_LOG(LogIIP, Log, TEXT("  Roll %d: %d item(s)"), i + 1, Items.Num());
 					for (const FItemInstance& Item : Items)
 					{
-						UE_LOG(LogTemp, Log, TEXT("    - %s x%d"),
+						UE_LOG(LogIIP, Log, TEXT("    - %s x%d"),
 							*Item.ItemDefinitionId.ToString(), Item.StackCount);
 					}
 				}

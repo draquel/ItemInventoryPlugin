@@ -1,4 +1,5 @@
 #include "Data/LootTable.h"
+#include "ItemInventoryPlugin.h"
 
 #if WITH_EDITOR
 void ULootTable::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
@@ -16,7 +17,7 @@ void ULootTable::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 			if (Entry.MaxQuantity < Entry.MinQuantity)
 			{
 				Entry.MaxQuantity = Entry.MinQuantity;
-				UE_LOG(LogTemp, Warning,
+				UE_LOG(LogIIP, Warning,
 					TEXT("LootTable '%s': %s[%d] MaxQuantity was less than MinQuantity, clamped."),
 					*GetName(), *ArrayName, i);
 			}
@@ -24,7 +25,7 @@ void ULootTable::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 			// Warn if neither item nor nested table is set
 			if (!Entry.IsValid())
 			{
-				UE_LOG(LogTemp, Warning,
+				UE_LOG(LogIIP, Warning,
 					TEXT("LootTable '%s': %s[%d] has no ItemDefinitionId or NestedTable set."),
 					*GetName(), *ArrayName, i);
 			}
@@ -32,7 +33,7 @@ void ULootTable::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 			// Warn if both item and nested table are set
 			if (Entry.ItemDefinitionId.IsValid() && !Entry.NestedTable.IsNull())
 			{
-				UE_LOG(LogTemp, Warning,
+				UE_LOG(LogIIP, Warning,
 					TEXT("LootTable '%s': %s[%d] has both ItemDefinitionId and NestedTable — NestedTable takes priority."),
 					*GetName(), *ArrayName, i);
 			}
@@ -44,7 +45,7 @@ void ULootTable::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 				if (Nested == this)
 				{
 					Entry.NestedTable = nullptr;
-					UE_LOG(LogTemp, Error,
+					UE_LOG(LogIIP, Error,
 						TEXT("LootTable '%s': %s[%d] references itself — cleared to prevent infinite recursion."),
 						*GetName(), *ArrayName, i);
 				}
