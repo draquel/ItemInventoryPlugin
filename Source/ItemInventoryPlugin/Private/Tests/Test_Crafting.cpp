@@ -59,7 +59,7 @@ namespace CraftingTestHelpers
 	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCrafting_StationRule, "Crafting.StationRule",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCrafting_StationRule, "ItemInventory.Crafting.StationRule",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FCrafting_StationRule::RunTest(const FString& Parameters)
 {
@@ -71,7 +71,7 @@ bool FCrafting_StationRule::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCrafting_Ingredients, "Crafting.Ingredients",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCrafting_Ingredients, "ItemInventory.Crafting.Ingredients",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FCrafting_Ingredients::RunTest(const FString& Parameters)
 {
@@ -100,7 +100,7 @@ bool FCrafting_Ingredients::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCrafting_PlaceableSlope, "Crafting.PlaceableSlope",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCrafting_PlaceableSlope, "ItemInventory.Crafting.PlaceableSlope",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FCrafting_PlaceableSlope::RunTest(const FString& Parameters)
 {
