@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 // Blob storage (feature 9): the local backend round-trips an opaque document by key.
 // ---------------------------------------------------------------------------
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStorageBlob_LocalRoundTrip, "ItemStorage.Blob.LocalRoundTrip",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStorageBlob_LocalRoundTrip, "ItemInventory.Storage.Blob.LocalRoundTrip",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FStorageBlob_LocalRoundTrip::RunTest(const FString& Parameters)
 {

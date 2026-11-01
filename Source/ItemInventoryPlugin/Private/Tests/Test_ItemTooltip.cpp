@@ -13,7 +13,7 @@
 
 // QA refinement R8: tooltips show an item's stats and wear (weapon durability was invisible; QA F5-07 was blocked).
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemTooltip_AttributeNames, "Inventory.Tooltip.AttributeNames",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemTooltip_AttributeNames, "ItemInventory.Tooltip.AttributeNames",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FItemTooltip_AttributeNames::RunTest(const FString& Parameters)
 {
@@ -24,7 +24,7 @@ bool FItemTooltip_AttributeNames::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemTooltip_FormatsStats, "Inventory.Tooltip.FormatsStats",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemTooltip_FormatsStats, "ItemInventory.Tooltip.FormatsStats",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 bool FItemTooltip_FormatsStats::RunTest(const FString& Parameters)
 {
