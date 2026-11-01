@@ -7,6 +7,7 @@
 #include "ItemDatabaseSubsystem.generated.h"
 
 class UItemDefinition;
+class UInventoryComponent;
 
 /**
  * Game instance subsystem that manages item definitions.
@@ -50,6 +51,21 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Item Database")
 	FItemInstance CreateItemInstance(FPrimaryAssetId AssetId, int32 StackCount = 1);
+
+	/**
+	 * Give an inventory a stack of a definition named on the console: the one implementation behind Inventory.Give and the
+	 * character's GiveItem exec (code review CR2, FW-37). The name is the definition's primary asset name, exactly, or with
+	 * bMatchSubstring the first registered definition whose name contains it. SERVER ONLY (CreateItemInstance).
+	 * @param Inventory The inventory to add to (null: Failed, once the definition is resolved and the instance made)
+	 * @param Name The definition's name, or a part of it
+	 * @param Count The stack count (at least 1)
+	 * @param bMatchSubstring Take the first registered definition whose name contains Name instead of the exact name
+	 * @param OutDefinition The definition resolved (invalid when no name matched)
+	 * @return ItemNotFound when no definition matched the substring, InvalidItem when no instance could be made from the
+	 *         definition, Failed with no inventory, else the inventory's result
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Item Database|Debug")
+	EInventoryOperationResult GiveItemByName(UInventoryComponent* Inventory, const FString& Name, int32 Count, bool bMatchSubstring, FPrimaryAssetId& OutDefinition);
 
 private:
 	/** Scan asset registry and cache definitions */
