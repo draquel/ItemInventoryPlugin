@@ -66,15 +66,14 @@ void FItemInventoryPluginModule::StartupModule()
 					if (Count < 1) Count = 1;
 				}
 
-				FPrimaryAssetId AssetId(FPrimaryAssetType("ItemDefinition"), FName(*DefName));
-				FItemInstance Item = DB->CreateItemInstance(AssetId, Count);
-				if (!Item.IsValid())
+				// The one give (code review CR2, FW-37): the definition by its exact name.
+				FPrimaryAssetId AssetId;
+				const EInventoryOperationResult Result = DB->GiveItemByName(Inventory, DefName, Count, /*bMatchSubstring=*/false, AssetId);
+				if (Result == EInventoryOperationResult::InvalidItem)
 				{
 					UE_LOG(LogIIP, Warning, TEXT("Inventory.Give: Failed to create item '%s'. Definition not found."), *DefName);
 					return;
 				}
-
-				EInventoryOperationResult Result = Inventory->TryAddItem(Item);
 				UE_LOG(LogIIP, Log, TEXT("Inventory.Give: '%s' x%d -> %s"),
 					*DefName, Count,
 					Result == EInventoryOperationResult::Success ? TEXT("Success") : TEXT("Failed"));

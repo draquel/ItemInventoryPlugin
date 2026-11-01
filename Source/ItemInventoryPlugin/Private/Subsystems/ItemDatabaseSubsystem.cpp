@@ -1,6 +1,7 @@
 #include "Subsystems/ItemDatabaseSubsystem.h"
 #include "ItemInventoryPlugin.h"
 #include "Data/ItemDefinition.h"
+#include "Components/InventoryComponent.h"
 #include "Engine/AssetManager.h"
 
 void UItemDatabaseSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -98,4 +99,44 @@ FItemInstance UItemDatabaseSubsystem::CreateItemInstance(FPrimaryAssetId AssetId
 	}
 
 	return Instance;
+}
+
+EInventoryOperationResult UItemDatabaseSubsystem::GiveItemByName(UInventoryComponent* Inventory, const FString& Name, int32 Count, bool bMatchSubstring, FPrimaryAssetId& OutDefinition)
+{
+	OutDefinition = FPrimaryAssetId();
+	if (Count <= 0)
+	{
+		Count = 1;
+	}
+	if (bMatchSubstring)
+	{
+		// The first registered definition whose name contains the text.
+		for (const FPrimaryAssetId& Id : GetAllDefinitionIds())
+		{
+			if (Id.PrimaryAssetName.ToString().Contains(Name))
+			{
+				OutDefinition = Id;
+				break;
+			}
+		}
+		if (!OutDefinition.IsValid())
+		{
+			return EInventoryOperationResult::ItemNotFound;
+		}
+	}
+	else
+	{
+		OutDefinition = FPrimaryAssetId(FPrimaryAssetType("ItemDefinition"), FName(*Name));
+	}
+
+	const FItemInstance Instance = CreateItemInstance(OutDefinition, Count);
+	if (!Instance.IsValid())
+	{
+		return EInventoryOperationResult::InvalidItem;
+	}
+	if (!Inventory)
+	{
+		return EInventoryOperationResult::Failed;
+	}
+	return Inventory->TryAddItem(Instance);
 }
