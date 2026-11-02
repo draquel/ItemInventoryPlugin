@@ -37,7 +37,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Item Storage")
 	void SaveInventory(UInventoryComponent* Component);
 
-	/** Load items from storage into a component */
+	/** Load items from storage into a component (server only: refused, with a warning, for a client's component) */
 	UFUNCTION(BlueprintCallable, Category = "Item Storage")
 	void LoadInventory(UInventoryComponent* Component, const FString& OwnerId);
 
