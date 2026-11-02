@@ -55,7 +55,8 @@ void UItemStorageSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UItemStorageSubsystem::Deinitialize()
 {
-	// Save all dirty inventories before shutdown
+	// Start saving every dirty inventory before shutdown. Nothing waits: a remote backend's requests keep their queue
+	// alive and are still sent (G93).
 	SaveAll();
 
 	// Clear timer
@@ -71,6 +72,7 @@ void UItemStorageSubsystem::Deinitialize()
 	}
 
 	RegisteredInventories.Empty();
+	PendingLoads.Empty();
 	StorageBackend = nullptr;
 
 	Super::Deinitialize();
@@ -115,18 +117,16 @@ void UItemStorageSubsystem::UnregisterInventory(UInventoryComponent* Component)
 	{
 		if (RegisteredInventories[i].Component.Get() == Component)
 		{
-			// Save if dirty before unregistering
-			if (Component->IsDirty() && StorageBackend.GetInterface())
-			{
-				TArray<FItemInstance> Items = CollectItemsFromComponent(Component);
-				ICGFItemStorageInterface::Execute_SaveInventory(
-					StorageBackend.GetObject(), RegisteredInventories[i].OwnerId, Items);
-				Component->ClearDirty();
-			}
-
-			UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Unregistered inventory '%s'"),
-				*RegisteredInventories[i].OwnerId);
+			const FString OwnerId = RegisteredInventories[i].OwnerId;
 			RegisteredInventories.RemoveAt(i);
+			UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Unregistered inventory '%s'"), *OwnerId);
+
+			// Save if dirty (fire-and-forget: a failure can no longer be retried, the backend logs it). After the removal:
+			// a backend that answers at once reports, and OnInventorySaved's listeners run, inside this call.
+			if (Component->IsDirty() && StorageBackend.GetObject())
+			{
+				StartSave(Component, OwnerId);
+			}
 			break;
 		}
 	}
@@ -136,11 +136,13 @@ void UItemStorageSubsystem::UnregisterInventory(UInventoryComponent* Component)
 // Manual Operations
 // ---------------------------------------------------------------------------
 
-void UItemStorageSubsystem::SaveInventory(UInventoryComponent* Component)
+bool UItemStorageSubsystem::SaveInventory(UInventoryComponent* Component)
 {
-	if (!Component || !StorageBackend.GetInterface())
+	if (!Component || !StorageBackend.GetObject())
 	{
-		return;
+		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: SaveInventory refused: %s"),
+			Component ? TEXT("no storage backend") : TEXT("no component"));
+		return false;
 	}
 
 	// Find the owner ID for this component
@@ -148,21 +150,21 @@ void UItemStorageSubsystem::SaveInventory(UInventoryComponent* Component)
 	{
 		if (Reg.Component.Get() == Component)
 		{
-			TArray<FItemInstance> Items = CollectItemsFromComponent(Component);
-			ICGFItemStorageInterface::Execute_SaveInventory(StorageBackend.GetObject(), Reg.OwnerId, Items);
-			Component->ClearDirty();
-			return;
+			StartSave(Component, Reg.OwnerId);
+			return true;
 		}
 	}
 
 	UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: SaveInventory called for unregistered component"));
+	return false;
 }
 
-void UItemStorageSubsystem::LoadInventory(UInventoryComponent* Component, const FString& OwnerId)
+bool UItemStorageSubsystem::LoadInventory(UInventoryComponent* Component, const FString& OwnerId)
 {
-	if (!Component || !StorageBackend.GetInterface() || OwnerId.IsEmpty())
+	if (!Component || !StorageBackend.GetObject() || OwnerId.IsEmpty())
 	{
-		return;
+		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: LoadInventory('%s') refused: no component, backend or owner id"), *OwnerId);
+		return false;
 	}
 
 	// Loading puts whole items into the inventory: the server's storage only, never a client's (G91).
@@ -170,42 +172,64 @@ void UItemStorageSubsystem::LoadInventory(UInventoryComponent* Component, const 
 	if (Owner && !Owner->HasAuthority())
 	{
 		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: LoadInventory('%s') on a client refused: inventories load on the server."), *OwnerId);
-		return;
+		return false;
 	}
 
-	TArray<FItemInstance> Items = ICGFItemStorageInterface::Execute_LoadInventory(
-		StorageBackend.GetObject(), OwnerId);
-
-	ApplyItemsToComponent(Component, Items);
-	Component->ClearDirty();
-
-	UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Loaded %d items for '%s'"), Items.Num(), *OwnerId);
+	// Recorded before the call: a backend that answers at once reports before the call returns.
+	PendingLoads.Add({ Component, OwnerId });
+	FOnStorageLoadComplete Callback;
+	Callback.BindDynamic(this, &UItemStorageSubsystem::HandleLoadComplete);
+	ICGFItemStorageInterface::Execute_LoadInventoryAsync(StorageBackend.GetObject(), OwnerId, Callback);
+	return true;
 }
 
-void UItemStorageSubsystem::SaveAll()
+int32 UItemStorageSubsystem::SaveAll()
 {
-	if (!StorageBackend.GetInterface())
+	if (!StorageBackend.GetObject())
 	{
-		return;
+		return 0;
 	}
 
-	int32 SaveCount = 0;
-	for (FRegisteredInventory& Reg : RegisteredInventories)
+	// Collected first: a backend that answers at once reports inside StartSave, and a listener may unregister.
+	TArray<FRegisteredInventory> ToSave;
+	for (const FRegisteredInventory& Reg : RegisteredInventories)
 	{
 		UInventoryComponent* Comp = Reg.Component.Get();
 		if (Comp && Comp->IsDirty())
 		{
-			TArray<FItemInstance> Items = CollectItemsFromComponent(Comp);
-			ICGFItemStorageInterface::Execute_SaveInventory(StorageBackend.GetObject(), Reg.OwnerId, Items);
-			Comp->ClearDirty();
+			ToSave.Add(Reg);
+		}
+	}
+
+	int32 SaveCount = 0;
+	for (const FRegisteredInventory& Reg : ToSave)
+	{
+		if (UInventoryComponent* Comp = Reg.Component.Get())
+		{
+			StartSave(Comp, Reg.OwnerId);
 			++SaveCount;
 		}
 	}
 
 	if (SaveCount > 0)
 	{
-		UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: SaveAll saved %d inventories"), SaveCount);
+		UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: SaveAll started %d saves"), SaveCount);
 	}
+	return SaveCount;
+}
+
+bool UItemStorageSubsystem::SetStorageBackend(UObject* Backend)
+{
+	if (!Backend || !Backend->GetClass()->ImplementsInterface(UCGFItemStorageInterface::StaticClass()))
+	{
+		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: SetStorageBackend refused: '%s' does not implement ICGFItemStorageInterface"),
+			*GetNameSafe(Backend));
+		return false;
+	}
+
+	StorageBackend.SetObject(Backend);
+	StorageBackend.SetInterface(Cast<ICGFItemStorageInterface>(Backend));
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,30 +238,83 @@ void UItemStorageSubsystem::SaveAll()
 
 void UItemStorageSubsystem::OnAutoSaveTick()
 {
-	if (!StorageBackend.GetInterface())
+	if (!StorageBackend.GetObject())
 	{
 		return;
 	}
 
-	// Clean up stale entries and save dirty ones
-	for (int32 i = RegisteredInventories.Num() - 1; i >= 0; --i)
+	// Clean up stale entries, then start saving the dirty ones; the backend never makes this wait (G93).
+	RegisteredInventories.RemoveAll([](const FRegisteredInventory& Reg) { return !Reg.Component.IsValid(); });
+	SaveAll();
+}
+
+// ---------------------------------------------------------------------------
+// Asynchronous saves and loads (G93)
+// ---------------------------------------------------------------------------
+
+void UItemStorageSubsystem::StartSave(UInventoryComponent* Component, const FString& OwnerId)
+{
+	// Cleared before the call: a change made while the save is in flight marks the inventory dirty again and is saved
+	// by the next pass; a backend that answers at once may report (and re-dirty on failure) before the call returns.
+	Component->ClearDirty();
+
+	FOnStorageComplete Callback;
+	Callback.BindDynamic(this, &UItemStorageSubsystem::HandleSaveComplete);
+	ICGFItemStorageInterface::Execute_SaveInventoryAsync(StorageBackend.GetObject(), OwnerId,
+		CollectItemsFromComponent(Component), Callback);
+}
+
+void UItemStorageSubsystem::HandleSaveComplete(const FString& OwnerId, bool bSuccess)
+{
+	if (!bSuccess)
 	{
-		FRegisteredInventory& Reg = RegisteredInventories[i];
-		UInventoryComponent* Comp = Reg.Component.Get();
-
-		if (!Comp)
+		// The backend has logged why; the next auto-save tries again.
+		for (const FRegisteredInventory& Reg : RegisteredInventories)
 		{
-			RegisteredInventories.RemoveAt(i);
-			continue;
-		}
-
-		if (Comp->IsDirty())
-		{
-			TArray<FItemInstance> Items = CollectItemsFromComponent(Comp);
-			ICGFItemStorageInterface::Execute_SaveInventory(StorageBackend.GetObject(), Reg.OwnerId, Items);
-			Comp->ClearDirty();
+			if (Reg.OwnerId == OwnerId)
+			{
+				if (UInventoryComponent* Comp = Reg.Component.Get())
+				{
+					Comp->MarkDirty();
+				}
+			}
 		}
 	}
+
+	OnInventorySaved.Broadcast(OwnerId, bSuccess);
+}
+
+void UItemStorageSubsystem::HandleLoadComplete(const FString& OwnerId, bool bSuccess, const TArray<FItemInstance>& Items)
+{
+	const int32 Index = PendingLoads.IndexOfByPredicate([&OwnerId](const FRegisteredInventory& Pending)
+	{
+		return Pending.OwnerId == OwnerId;
+	});
+	UInventoryComponent* Component = nullptr;
+	if (Index != INDEX_NONE)
+	{
+		Component = PendingLoads[Index].Component.Get();
+		PendingLoads.RemoveAt(Index);
+	}
+
+	if (!Component)
+	{
+		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: load of '%s' finished after its component went away"), *OwnerId);
+		OnInventoryLoaded.Broadcast(OwnerId, false);
+		return;
+	}
+
+	if (!bSuccess)
+	{
+		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: load of '%s' failed; the inventory is left as it was"), *OwnerId);
+		OnInventoryLoaded.Broadcast(OwnerId, false);
+		return;
+	}
+
+	ApplyItemsToComponent(Component, Items);
+	Component->ClearDirty();
+	UE_LOG(LogIIP, Verbose, TEXT("ItemStorageSubsystem: Loaded %d items for '%s'"), Items.Num(), *OwnerId);
+	OnInventoryLoaded.Broadcast(OwnerId, true);
 }
 
 // ---------------------------------------------------------------------------

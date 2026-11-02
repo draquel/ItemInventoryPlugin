@@ -25,14 +25,24 @@ public:
 	virtual bool DeleteBlob_Implementation(const FString& Key) override;
 	virtual bool HasBlob_Implementation(const FString& Key) override;
 
+	/** Synchronous: the save, then the callback, before returning (G93: a file needs no wait). */
+	virtual void SaveInventoryAsync_Implementation(const FString& OwnerId, const TArray<FItemInstance>& Items,
+		const FOnStorageComplete& Callback) override;
+	/** Synchronous: the read, then the callback, before returning; bSuccess false only for a file that does not deserialize. */
+	virtual void LoadInventoryAsync_Implementation(const FString& OwnerId, const FOnStorageLoadComplete& Callback) override;
+
 	/** [Saved]/SaveGames/Worlds/<Key>.json — where blobs (world saves) live. */
 	static FString GetBlobPath(const FString& Key);
-	virtual void SaveInventoryAsync(const FString& OwnerId, const TArray<FItemInstance>& Items,
-		const FOnStorageComplete& Callback) override;
-	virtual void LoadInventoryAsync(const FString& OwnerId,
-		const FOnStorageLoadComplete& Callback) override;
 
 private:
+	/**
+	 * Read one inventory file.
+	 * @param OwnerId  The inventory's storage id
+	 * @param OutItems The items read; empty when there is no file
+	 * @return False when the file exists but does not deserialize
+	 */
+	static bool ReadInventory(const FString& OwnerId, TArray<FItemInstance>& OutItems);
+
 	/** Get the full file path for a given owner ID */
 	static FString GetSavePath(const FString& OwnerId);
 

@@ -61,4 +61,10 @@ public:
 		meta = (EditCondition = "StorageBackend == EItemStorageBackend::Remote",
 		ClampMin = "1.0", UIMin = "1.0"))
 	float RemoteTimeoutSeconds = 10.0f;
+
+	/** The first retry's back-off; each further retry doubles it (1, 2, 4 s). Waited on a timer, never on the game thread. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Storage|Remote",
+		meta = (EditCondition = "StorageBackend == EItemStorageBackend::Remote",
+		ClampMin = "0.0", UIMin = "0.0"))
+	float RemoteRetryDelaySeconds = 1.0f;
 };

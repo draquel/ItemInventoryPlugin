@@ -3,7 +3,6 @@
 #include "Storage/ItemSerializationUtils.h"
 #include "Misc/FileHelper.h"
 #include "HAL/PlatformFileManager.h"
-#include "Async/Async.h"
 
 // ---------------------------------------------------------------------------
 // ICGFItemStorageInterface — Sync
@@ -47,24 +46,32 @@ bool ULocalItemStorage::SaveInventory_Implementation(const FString& OwnerId, con
 TArray<FItemInstance> ULocalItemStorage::LoadInventory_Implementation(const FString& OwnerId)
 {
 	TArray<FItemInstance> Items;
+	ReadInventory(OwnerId, Items);
+	return Items;
+}
+
+bool ULocalItemStorage::ReadInventory(const FString& OwnerId, TArray<FItemInstance>& OutItems)
+{
+	OutItems.Reset();
 	const FString FilePath = GetSavePath(OwnerId);
 
 	FString JsonString;
 	if (!FFileHelper::LoadFileToString(JsonString, *FilePath))
 	{
 		UE_LOG(LogIIP, Verbose, TEXT("LocalItemStorage: No save file for '%s' at '%s'"), *OwnerId, *FilePath);
-		return Items;
+		return true;
 	}
 
 	FString LoadedOwnerId;
-	if (!FItemSerializationUtils::DeserializeInventory(JsonString, LoadedOwnerId, Items, GetTransientPackage()))
+	if (!FItemSerializationUtils::DeserializeInventory(JsonString, LoadedOwnerId, OutItems, GetTransientPackage()))
 	{
 		UE_LOG(LogIIP, Warning, TEXT("LocalItemStorage: Failed to deserialize inventory for '%s'"), *OwnerId);
-		Items.Empty();
+		OutItems.Empty();
+		return false;
 	}
 
-	UE_LOG(LogIIP, Verbose, TEXT("LocalItemStorage: Loaded inventory for '%s' (%d items)"), *OwnerId, Items.Num());
-	return Items;
+	UE_LOG(LogIIP, Verbose, TEXT("LocalItemStorage: Loaded inventory for '%s' (%d items)"), *OwnerId, OutItems.Num());
+	return true;
 }
 
 bool ULocalItemStorage::DeleteInventory_Implementation(const FString& OwnerId)
@@ -84,72 +91,21 @@ bool ULocalItemStorage::DeleteInventory_Implementation(const FString& OwnerId)
 // ICGFItemStorageInterface — Async
 // ---------------------------------------------------------------------------
 
-void ULocalItemStorage::SaveInventoryAsync(const FString& OwnerId, const TArray<FItemInstance>& Items,
+// A file answers at once: the asynchronous calls do the synchronous work on the calling thread and run the callback
+// before returning, so the auto-save writes exactly as it always has and two saves of one inventory cannot reorder (G93).
+
+void ULocalItemStorage::SaveInventoryAsync_Implementation(const FString& OwnerId, const TArray<FItemInstance>& Items,
 	const FOnStorageComplete& Callback)
 {
-	// Serialize to string on the calling thread (UObjects aren't thread-safe)
-	const FString JsonString = FItemSerializationUtils::SerializeInventory(OwnerId, Items);
-	const FString FinalPath = GetSavePath(OwnerId);
-
-	EnsureDirectoryExists();
-
-	// File I/O on background thread, callback on game thread
-	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [JsonString, FinalPath, Callback, WeakThis = TWeakObjectPtr<ULocalItemStorage>(this)]()
-	{
-		const FString TempPath = FinalPath + TEXT(".tmp");
-		bool bSuccess = false;
-
-		if (FFileHelper::SaveStringToFile(JsonString, *TempPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-		{
-			IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-			if (PlatformFile.FileExists(*FinalPath))
-			{
-				PlatformFile.DeleteFile(*FinalPath);
-			}
-			bSuccess = PlatformFile.MoveFile(*FinalPath, *TempPath);
-			if (!bSuccess)
-			{
-				PlatformFile.DeleteFile(*TempPath);
-			}
-		}
-
-		AsyncTask(ENamedThreads::GameThread, [Callback, bSuccess]()
-		{
-			Callback.ExecuteIfBound(bSuccess);
-		});
-	});
+	const bool bSuccess = SaveInventory_Implementation(OwnerId, Items);
+	Callback.ExecuteIfBound(OwnerId, bSuccess);
 }
 
-void ULocalItemStorage::LoadInventoryAsync(const FString& OwnerId,
-	const FOnStorageLoadComplete& Callback)
+void ULocalItemStorage::LoadInventoryAsync_Implementation(const FString& OwnerId, const FOnStorageLoadComplete& Callback)
 {
-	const FString FilePath = GetSavePath(OwnerId);
-
-	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [FilePath, OwnerId, Callback]()
-	{
-		FString JsonString;
-		bool bFileLoaded = FFileHelper::LoadFileToString(JsonString, *FilePath);
-
-		// Deserialization must happen on game thread (creates UObjects)
-		AsyncTask(ENamedThreads::GameThread, [JsonString = MoveTemp(JsonString), bFileLoaded, OwnerId, Callback]()
-		{
-			TArray<FItemInstance> Items;
-			bool bSuccess = false;
-
-			if (bFileLoaded)
-			{
-				FString LoadedOwnerId;
-				bSuccess = FItemSerializationUtils::DeserializeInventory(JsonString, LoadedOwnerId, Items, GetTransientPackage());
-			}
-			else
-			{
-				// No file = valid empty inventory
-				bSuccess = true;
-			}
-
-			Callback.ExecuteIfBound(bSuccess, Items);
-		});
-	});
+	TArray<FItemInstance> Items;
+	const bool bSuccess = ReadInventory(OwnerId, Items);
+	Callback.ExecuteIfBound(OwnerId, bSuccess, Items);
 }
 
 // ---------------------------------------------------------------------------

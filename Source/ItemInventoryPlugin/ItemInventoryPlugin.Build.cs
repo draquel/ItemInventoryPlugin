@@ -28,5 +28,11 @@ public class ItemInventoryPlugin : ModuleRules
 			"SlateCore",
 			"InputCore",
 		});
+
+		// The remote storage tests (G93) answer HTTP on a socket in the process; tests are not built for Shipping.
+		if (Target.Configuration != UnrealTargetConfiguration.Shipping)
+		{
+			PrivateDependencyModuleNames.Add("Sockets");
+		}
 	}
 }

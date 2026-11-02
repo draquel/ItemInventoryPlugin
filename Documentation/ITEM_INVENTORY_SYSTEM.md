@@ -249,11 +249,22 @@ with neither or both of an item and a nested table. Cycles between tables are ca
 registered inventories:
 
 - A component with a `StorageOwnerId` and `bAutoRegisterStorage` registers in `BeginPlay` and unregisters in `EndPlay`,
-  which saves it when dirty.
-- With `bAutoSaveEnabled`, a timer every `AutoSaveIntervalSeconds` (30 s) saves each dirty inventory through the
-  backend's synchronous `SaveInventory` and clears its dirty flag.
-- `SaveAll` runs at `Deinitialize`; `UInventoryComponent::ManualSave` / `ManualLoad` save or load one inventory.
-- `GetStorageBackend()` hands the backend to the world save (VoxelWorldSave), which stores its documents as blobs.
+  which starts saving it when dirty.
+- Every save and load is asynchronous and never waits (G93): the subsystem calls the backend's `SaveInventoryAsync` /
+  `LoadInventoryAsync` and returns at once; the results arrive on `OnInventorySaved(OwnerId, bSuccess)` and
+  `OnInventoryLoaded(OwnerId, bSuccess)` (BlueprintAssignable).
+- With `bAutoSaveEnabled`, a timer every `AutoSaveIntervalSeconds` (30 s) starts saving each dirty inventory
+  (fire-and-forget). Starting a save clears the dirty flag; a save that fails marks the inventory dirty again, so the
+  next auto-save tries again, and a change made while a save is in flight is saved by the next pass.
+- `SaveInventory` (one registered component) and `LoadInventory` return false when nothing started (unregistered, no
+  backend, a client's component); `SaveAll` returns the number of saves started and runs at `Deinitialize` (a remote
+  save started there is still sent: its request keeps its queue alive). `UInventoryComponent::ManualSave` /
+  `ManualLoad` go through them and return the same.
+- A load replaces the inventory when its read lands; a failed read leaves the inventory as it was (the old synchronous
+  path applied the empty result of a failed remote read, clearing it).
+- `GetStorageBackend()` hands the backend to the world save (VoxelWorldSave), which stores its documents as blobs;
+  `SetStorageBackend(Object)` installs another (a custom backend, a remote one configured in code), refusing an object
+  that does not implement `ICGFItemStorageInterface`.
 
 ### Serialization Format
 
@@ -291,18 +302,45 @@ Only valid items are written. A document whose `version` differs from the curren
 - Inventories: `Saved/SaveGames/Inventories/<OwnerId>.json`.
 - Blobs: `Saved/SaveGames/Worlds/<Key>.json`, the key sanitised to a file name.
 - Every write goes to a `.tmp` file first and is then moved over the target, so a crash leaves the old file.
-- `SaveInventoryAsync` serializes on the calling thread and writes on a background task; the callback returns on the
-  game thread.
+- A file answers at once, so the asynchronous calls do the synchronous work on the calling thread and run the callback
+  before returning: the auto-save writes exactly as it did before G93, and two saves of one inventory cannot reorder (the
+  earlier background-task writes could, through the shared `.tmp` file). `LoadInventoryAsync` reports failure only for a
+  file that does not deserialize; no file is an empty inventory.
 
 ### URemoteItemStorage
 
 - Endpoint: `UItemSystemSettings::RemoteEndpointURL`; an inventory is `POST` (save), `GET` (load) and `DELETE` at
   `<RemoteEndpointURL>/<OwnerId>`, a blob at `<RemoteEndpointURL>/blobs/<Key>` (fire-and-forget `POST` / `DELETE`;
   the synchronous blob load and `HasBlob` return false).
-- `Authorization: Bearer <RemoteAuthToken>`; timeout `RemoteTimeoutSeconds` (10 s) per request; `RemoteMaxRetries`
-  (3) retries with 1, 2, 4 s of backoff.
-- The synchronous calls wait for the response on the calling thread. A starting point: real projects subclass or
-  replace it for their backend.
+- `Authorization: Bearer <RemoteAuthToken>`; timeout `RemoteTimeoutSeconds` (10 s) per attempt, enforced by the HTTP
+  module; `RemoteMaxRetries` (3) retries after a failure with no response, a timeout, 408, 429 or 5xx (other refusals
+  are final), with `RemoteRetryDelaySeconds` (1 s) of back-off doubling each time (1, 2, 4 s). The configuration is a
+  `FRemoteItemStorageConfig` taken from the settings when the backend is created; `Configure` replaces it.
+- Nothing waits on the calling thread (G93). Each resource (an inventory, a blob) has one request in flight at a time
+  and a queue behind it, so its operations land in the order requested. Retries wait on the core ticker
+  (`FTSTicker`), never in a sleep.
+- **The ordering rule:** of overlapping saves of one inventory, the last one requested is the one that lands. A save
+  queued behind the running request replaces a save already waiting there, and a running save that fails with a newer
+  save waiting gives way to it at once (no retry of stale contents). A superseded save's callback reports the result of
+  the save that superseded it: whether that inventory's state as of the request, or later, reached the server. A load
+  or delete queued behind saves runs after them, so a load reads the last save.
+- The asynchronous calls report on the game thread; a GET answered 404 is an empty inventory (as a missing local
+  file). The synchronous `SaveInventory`, `DeleteInventory`, `SaveBlob` and `DeleteBlob` queue the request and return
+  true at once (accepted; the outcome is logged, a final failure at Warning); the synchronous `LoadInventory`,
+  `LoadBlob` and `HasBlob` cannot answer without waiting and return nothing with a warning (`LoadInventoryAsync` exists;
+  blobs have no asynchronous read yet, so the world save needs the local backend).
+- The queue is shared with the requests in flight, so a save started as the game instance shuts down is still sent; its
+  retries run while the core ticker does (in the editor after PIE; not after the process exits).
+- A starting point: real projects subclass or replace it for their backend.
+
+**Result (G93, 2026-11-02).** The remote backend spin-waited on each request with `FPlatformProcess::Sleep`, up to
+`RemoteTimeoutSeconds` per attempt and `RemoteMaxRetries` retries with sleeps between them, and the auto-save called it
+on the game thread: a server that never answered stalled the game for up to 47 s per dirty inventory (four 10 s
+attempts and 7 s of sleeps). The interface's
+asynchronous calls became `BlueprintNativeEvent`s whose default runs the synchronous call and the callback at once
+(`DeleteInventoryAsync` added; the callbacks carry the `OwnerId`), the remote backend became the queue above, and the
+subsystem's saves and loads went asynchronous. Tests `ItemInventory.Storage.Remote.*` and
+`ItemInventory.Storage.Subsystem.*`.
 
 ---
 
@@ -325,7 +363,10 @@ inventories and into a named slot, replace, split, merge, swap, failure cases), 
 refused; a move request delivered to the server as an instance id and a slot, simulated server/client in one world with
 `CGFTesting::FRPCCall`; `Authority.MoveTargetReach`, a move's target only the requester's own inventories or one opened
 to it, G96), `Queries.*`, `Filtering.*`, `Types.*`, `Serialization.*`,
-`Storage.Blob.LocalRoundTrip`, `ItemInventory.Loot.Distribution` (rolled counts against the entry weights), `Crafting.*`, `Tooltip.*`.
+`Storage.Blob.LocalRoundTrip`, `Storage.Remote.*` (G93, against a minimal HTTP server on a socket in the process, port
+18093, or a closed port: a save returns at once and reports later, retries after 503s, the last of overlapping saves lands and
+a load queued behind them reads it), `Storage.Subsystem.*` (SaveAll returns at once against an unreachable server and
+re-dirties on failure; the local backend saves and loads before returning), `ItemInventory.Loot.Distribution` (rolled counts against the entry weights), `Crafting.*`, `Tooltip.*`.
 
 ---
 

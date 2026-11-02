@@ -64,7 +64,9 @@ ItemInventoryPlugin/
    before touching either, and a move to a named slot lands exactly there or is refused (G94); a merge that would
    overflow is refused; a replace is validated whole.
 6. **Storage goes through `ICGFItemStorageInterface`.** Pick the backend in `UItemSystemSettings`; never write files or
-   HTTP from game code. The world save uses the same backend's blobs.
+   HTTP from game code. The world save uses the same backend's blobs. Nothing waits on the game thread (G93): callers
+   use the asynchronous calls (`SaveInventoryAsync`, `LoadInventoryAsync`), and a backend keeps the ordering rule (for one
+   inventory the last save requested lands; `ITEM_INVENTORY_SYSTEM.md`, URemoteItemStorage).
 7. **Recipes and definitions are primary assets.** A new `UCraftingRecipe` or `UItemDefinition` folder must be in the
    project's AssetManager scan list. `Craft` runs on the authority; callers check the station (distance, tag) inside their
    server RPC.
@@ -77,6 +79,7 @@ ItemInventoryPlugin/
 // ItemInventoryPlugin (Runtime)
 PublicDependencyModuleNames:  Core, CoreUObject, Engine, NetCore, GameplayTags, GameplayAbilities, CommonGameFramework
 PrivateDependencyModuleNames: HTTP, Json (storage), Niagara, DeveloperSettings, UMG, Slate, SlateCore, InputCore (UI)
+                              Sockets (not in Shipping: the remote storage tests' in-process HTTP server)
 
 // ItemSystemEditor (Editor)
 PublicDependencyModuleNames:  Core, CoreUObject, Engine, Slate, SlateCore, InputCore

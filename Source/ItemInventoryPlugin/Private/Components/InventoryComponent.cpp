@@ -1228,29 +1228,34 @@ UItemDatabaseSubsystem* UInventoryComponent::GetItemDatabase() const
 // Storage Operations
 // ===========================================================================
 
-void UInventoryComponent::ManualSave()
+bool UInventoryComponent::ManualSave()
 {
 	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
 	{
 		if (UItemStorageSubsystem* StorageSS = GI->GetSubsystem<UItemStorageSubsystem>())
 		{
-			StorageSS->SaveInventory(this);
+			return StorageSS->SaveInventory(this);
 		}
 	}
+	UE_LOG(LogIIP, Warning, TEXT("InventoryComponent: ManualSave on '%s' found no ItemStorageSubsystem"), *GetNameSafe(GetOwner()));
+	return false;
 }
 
-void UInventoryComponent::ManualLoad()
+bool UInventoryComponent::ManualLoad()
 {
 	if (StorageOwnerId.IsEmpty())
 	{
-		return;
+		UE_LOG(LogIIP, Warning, TEXT("InventoryComponent: ManualLoad on '%s' refused: no StorageOwnerId"), *GetNameSafe(GetOwner()));
+		return false;
 	}
 
 	if (UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr)
 	{
 		if (UItemStorageSubsystem* StorageSS = GI->GetSubsystem<UItemStorageSubsystem>())
 		{
-			StorageSS->LoadInventory(this, StorageOwnerId);
+			return StorageSS->LoadInventory(this, StorageOwnerId);
 		}
 	}
+	UE_LOG(LogIIP, Warning, TEXT("InventoryComponent: ManualLoad on '%s' found no ItemStorageSubsystem"), *GetNameSafe(GetOwner()));
+	return false;
 }
