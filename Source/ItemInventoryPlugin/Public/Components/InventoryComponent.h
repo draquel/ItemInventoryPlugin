@@ -88,7 +88,9 @@ public:
 
 	/**
 	 * Move a whole stack to another inventory (or another slot of this one). Both sides are validated before either
-	 * changes. A client sends the request to the server.
+	 * changes. A client sends the request to the server, which also requires the target to be reachable by this
+	 * inventory's owner (IsReachableBy: the same player's, or opened to it with SetOpenTo; G96) and answers NotAuthorized
+	 * through OnOperationFailed otherwise. The authority's own call is game code and moves between any inventories.
 	 * @param InstanceId      The stack to move
 	 * @param TargetInventory Where it goes
 	 * @param TargetSlot      -1: stack onto the target's stacks, then its first empty slots. A slot: exactly there, into
@@ -119,6 +121,32 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Operations")
 	EInventoryOperationResult TrySwapSlots(int32 SlotA, int32 SlotB);
+
+	// -----------------------------------------------------------------------
+	// Access: which requesters may name this inventory as a move's target (G96)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Open this inventory to a requester, or close it again: while open, the requester's move requests may name it as their
+	 * target (a chest or a station the player has opened). Server only and not replicated: the game layer opens on the
+	 * interaction that shows the container and closes when it is closed or out of reach.
+	 * @param Requester The player's actor (its pawn, its player state or its controller: the same player either way)
+	 * @param bOpen     True to open, false to close
+	 * @return False on a client or for no requester (nothing changes)
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory|Access")
+	bool SetOpenTo(AActor* Requester, bool bOpen);
+
+	/**
+	 * The reach rule for a move's target, which the server checks on every client move request (G96): the requester's own
+	 * inventory (this inventory's owner and the requester have the same owner at the top of their owner chains: the same
+	 * player, whether the inventory sits on its pawn, its player state or its controller), or one opened to that player
+	 * with SetOpenTo. An inventory with no owner is reachable by no one.
+	 * @param Requester The actor whose inventory the stack leaves (the move request's source owner)
+	 * @return True if the requester may move items into this inventory
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory|Access")
+	bool IsReachableBy(const AActor* Requester) const;
 
 	// -----------------------------------------------------------------------
 	// Queries
@@ -287,6 +315,9 @@ private:
 	UItemDatabaseSubsystem* GetItemDatabase() const;
 
 	bool bIsDirty = false;
+
+	/** The players this inventory is open to (SetOpenTo), by any of their actors; server only. */
+	TArray<TWeakObjectPtr<const AActor>> OpenToRequesters;
 
 	UPROPERTY()
 	mutable TObjectPtr<UItemDatabaseSubsystem> CachedItemDatabase;

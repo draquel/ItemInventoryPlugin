@@ -133,6 +133,17 @@ item there is `SlotOccupied`, a stack without room for the whole count `StackFul
 `InvalidSlot`. Within one inventory the weight is not counted twice, and a move onto the stack's own slot succeeds
 with nothing to do.
 
+A client's move also has to reach its target (G96, 2026-11-02): `ServerRPC_RequestMoveItem` refuses, with
+`NotAuthorized` and a server log, a target that `IsReachableBy` the requester (the source inventory's owner) says no to.
+A target is reachable when its owner and the requester have the same actor at the top of their owner chains (the same
+player: its pawn's, its player state's and its controller's inventories are all its own), or when the server opened it
+to that player with `SetOpenTo(Requester, true)` (authority only, not replicated; `SetOpenTo(Requester, false)` closes
+it). The game layer opens a container on the interaction that shows it and closes it when it is closed or out of reach;
+no container in the game layer moves items by `TryMoveItem` today (chests burst world items, the campsite and the
+dungeon door add and remove in place). The client does not predict reach (it cannot see the server's open marks): its
+`TryMoveItem` returns `Pending` and the refusal arrives through `OnOperationFailed`. The authority's own `TryMoveItem`
+is game code and moves between any inventories.
+
 **TryReplaceItem** (authority): the stack `InstanceId` leaves and `NewItem` takes its slot, in one step.
 `ValidateReplaceItem` checks it whole first: the stack exists (`ItemNotFound`), `NewItem` is valid (`InvalidItem`),
 passes the filters (`FilterRejected`), fits one stack (`StackFull`), and the weight after the exchange is allowed
@@ -312,7 +323,8 @@ Arguments and defaults for every project command are in `Documentation/EDITOR_CO
 `Source/ItemInventoryPlugin/Private/Tests/`, under `ItemInventory.*`: `Operations.*` (add, remove, move across
 inventories and into a named slot, replace, split, merge, swap, failure cases), `Authority.*` (a client's add and replace
 refused; a move request delivered to the server as an instance id and a slot, simulated server/client in one world with
-`CGFTesting::FRPCCall`), `Queries.*`, `Filtering.*`, `Types.*`, `Serialization.*`,
+`CGFTesting::FRPCCall`; `Authority.MoveTargetReach`, a move's target only the requester's own inventories or one opened
+to it, G96), `Queries.*`, `Filtering.*`, `Types.*`, `Serialization.*`,
 `Storage.Blob.LocalRoundTrip`, `ItemInventory.Loot.Distribution` (rolled counts against the entry weights), `Crafting.*`, `Tooltip.*`.
 
 ---

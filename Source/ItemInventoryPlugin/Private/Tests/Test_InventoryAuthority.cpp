@@ -293,4 +293,99 @@ bool FInventoryAuthorityClientMoveTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ===========================================================================
+// G96: a client's move reaches only its own inventories and those opened to it
+// ===========================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FInventoryAuthorityMoveReachTest,
+	"ItemInventory.Authority.MoveTargetReach",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FInventoryAuthorityMoveReachTest::RunTest(const FString& Parameters)
+{
+	using namespace InventoryAuthorityTestHelpers;
+	CGFTesting::FTestGameInstance Game;
+	UItemDatabaseSubsystem* Database = Game.GetSubsystem<UItemDatabaseSubsystem>();
+	if (!TestNotNull(TEXT("The item database"), Database))
+	{
+		return true;
+	}
+	const FPrimaryAssetId Ore = RegisterDefinition(Database, TEXT("ReachTestOre"), 20);
+
+	// The server's view of two players: each a controller owning a pawn and a player state, each with an inventory (the
+	// player state's as a stash), and an unowned chest. Requests arrive at a player's bag with FRPCCall.
+	AActor* ControllerA = Game.SpawnOwner();
+	AActor* PawnA = Game.SpawnOwner();
+	PawnA->SetOwner(ControllerA);
+	AActor* StateA = Game.SpawnOwner();
+	StateA->SetOwner(ControllerA);
+	AActor* ControllerB = Game.SpawnOwner();
+	AActor* PawnB = Game.SpawnOwner();
+	PawnB->SetOwner(ControllerB);
+	UInventoryComponent* BagA = MakeInventory(PawnA, 4);
+	UInventoryComponent* StashA = MakeInventory(StateA, 4);
+	UInventoryComponent* BagB = MakeInventory(PawnB, 4);
+	UInventoryComponent* Chest = MakeInventory(Game.SpawnOwner(), 4);
+
+	// The rule itself.
+	TestTrue(TEXT("A's bag is reachable by A's pawn"), BagA->IsReachableBy(PawnA));
+	TestTrue(TEXT("A's stash (its player state) is reachable by A's pawn: the same player"), StashA->IsReachableBy(PawnA));
+	TestFalse(TEXT("B's bag is not reachable by A's pawn"), BagB->IsReachableBy(PawnA));
+	TestFalse(TEXT("A closed chest is not reachable"), Chest->IsReachableBy(PawnA));
+	TestFalse(TEXT("No requester reaches nothing"), BagA->IsReachableBy(nullptr));
+
+	auto Move = [](UInventoryComponent* Source, const FGuid& Id, UInventoryComponent* Target)
+	{
+		return CGFTesting::FRPCCall(Source, TEXT("ServerRPC_RequestMoveItem"))
+			.Set(TEXT("InstanceId"), Id).Set(TEXT("Target"), Target).Set(TEXT("TargetSlot"), -1).Send();
+	};
+	const FItemInstance OreA = Database->CreateItemInstance(Ore, 5);
+	PlaceItemInSlot(BagA, OreA, 0);
+	AddExpectedMessage(TEXT("named an inventory it cannot reach"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 4);
+
+	// Into another player's bag: refused, nothing moves.
+	TestTrue(TEXT("The move into B's bag reached the server"), Move(BagA, OreA.InstanceId, BagB));
+	TestTrue(TEXT("Into B's bag: refused, the ore stays in A's bag"), BagA->GetItemInSlot(0).InstanceId == OreA.InstanceId);
+	TestEqual(TEXT("Into B's bag: B's bag stays empty"), BagB->GetFilledSlotCount(), 0);
+
+	// Into a chest nobody opened: refused.
+	Move(BagA, OreA.InstanceId, Chest);
+	TestEqual(TEXT("Into a closed chest: refused"), Chest->GetFilledSlotCount(), 0);
+
+	// Into the same player's stash: moves.
+	Move(BagA, OreA.InstanceId, StashA);
+	TestEqual(TEXT("Into A's stash: moved"), StashA->GetItemCount(Ore), 5);
+	TestEqual(TEXT("Into A's stash: A's bag is empty"), BagA->GetFilledSlotCount(), 0);
+
+	// The chest opened to A (by A's pawn) takes A's moves, from the stash too (the same player), and not B's.
+	TestTrue(TEXT("The server opens the chest to A"), Chest->SetOpenTo(PawnA, true));
+	TestTrue(TEXT("The open chest is reachable by A's player state"), Chest->IsReachableBy(StateA));
+	Move(StashA, OreA.InstanceId, Chest);
+	TestEqual(TEXT("Into the chest opened to A: moved"), Chest->GetItemCount(Ore), 5);
+	const FItemInstance OreB = Database->CreateItemInstance(Ore, 2);
+	PlaceItemInSlot(BagB, OreB, 0);
+	Move(BagB, OreB.InstanceId, Chest);
+	TestEqual(TEXT("B into the chest opened to A: refused"), Chest->GetItemCount(Ore), 5);
+	TestTrue(TEXT("B into the chest opened to A: B keeps its ore"), BagB->GetItemInSlot(0).InstanceId == OreB.InstanceId);
+
+	// Closed again: A is refused.
+	const FItemInstance OreA2 = Database->CreateItemInstance(Ore, 1);
+	PlaceItemInSlot(BagA, OreA2, 0);
+	TestTrue(TEXT("The server closes the chest to A"), Chest->SetOpenTo(PawnA, false));
+	Move(BagA, OreA2.InstanceId, Chest);
+	TestEqual(TEXT("Into the chest closed again: refused"), Chest->GetItemCount(Ore), 5);
+
+	// Only the server opens: a client's component refuses.
+	UInventoryComponent* ClientChest = MakeInventory(Game.SpawnRemoteOwner(), 2);
+	AddExpectedMessage(TEXT("opening an inventory is server-only"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
+	TestFalse(TEXT("SetOpenTo on a client is refused"), ClientChest->SetOpenTo(PawnA, true));
+
+	// The authority's own move is game code (a trade, a container's transfer): no reach rule.
+	TestEqual(TEXT("The server's TryMoveItem from A's bag into B's bag succeeds"),
+		Result(BagA->TryMoveItem(OreA2.InstanceId, BagB)), Result(EInventoryOperationResult::Success));
+
+	Release(Database, { Ore });
+	return true;
+}
+
 #endif // WITH_AUTOMATION_TESTS

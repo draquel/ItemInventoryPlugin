@@ -58,7 +58,8 @@ ItemInventoryPlugin/
    target), which the `Try*` function runs on the caller and the RPC runs again; split, merge and swap repeat their inline
    checks in the RPC. A refused RPC answers with
    `ClientRPC_OperationFailed`. New operations follow the same shape: a const predicate where the client pre-checks, the
-   checks again in the RPC, results as `EInventoryOperationResult`.
+   checks again in the RPC, results as `EInventoryOperationResult`. A request that names another inventory checks that
+   the requester can reach it (`IsReachableBy`: the same player's, or opened to it with `SetOpenTo`; G96).
 5. **No partial operations.** An add that does not fit entirely is refused; a cross-inventory move validates both sides
    before touching either, and a move to a named slot lands exactly there or is refused (G94); a merge that would
    overflow is refused; a replace is validated whole.
