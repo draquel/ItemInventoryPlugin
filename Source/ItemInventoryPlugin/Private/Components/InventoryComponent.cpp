@@ -683,6 +683,65 @@ bool UInventoryComponent::HasMutationAuthority() const
 	return !Owner || Owner->HasAuthority();
 }
 
+namespace
+{
+	/** The actor at the top of an owner chain: a player's controller for its pawn, player state and controller alike. */
+	const AActor* GetOwnerChainRoot(const AActor* Actor)
+	{
+		while (Actor && Actor->GetOwner())
+		{
+			Actor = Actor->GetOwner();
+		}
+		return Actor;
+	}
+}
+
+bool UInventoryComponent::SetOpenTo(AActor* Requester, bool bOpen)
+{
+	if (!HasMutationAuthority())
+	{
+		UE_LOG(LogIIP, Warning, TEXT("SetOpenTo on a client (%s): opening an inventory is server-only."), *GetNameSafe(GetOwner()));
+		return false;
+	}
+	if (!Requester)
+	{
+		UE_LOG(LogIIP, Warning, TEXT("SetOpenTo on %s: no requester."), *GetNameSafe(GetOwner()));
+		return false;
+	}
+	const AActor* Player = GetOwnerChainRoot(Requester);
+	OpenToRequesters.RemoveAll([Player](const TWeakObjectPtr<const AActor>& Opened)
+	{
+		return !Opened.IsValid() || GetOwnerChainRoot(Opened.Get()) == Player;
+	});
+	if (bOpen)
+	{
+		OpenToRequesters.Add(Requester);
+	}
+	return true;
+}
+
+bool UInventoryComponent::IsReachableBy(const AActor* Requester) const
+{
+	const AActor* Owner = GetOwner();
+	if (!Owner || !Requester)
+	{
+		return false;
+	}
+	const AActor* Player = GetOwnerChainRoot(Requester);
+	if (GetOwnerChainRoot(Owner) == Player)
+	{
+		return true;
+	}
+	for (const TWeakObjectPtr<const AActor>& Opened : OpenToRequesters)
+	{
+		if (Opened.IsValid() && GetOwnerChainRoot(Opened.Get()) == Player)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool UInventoryComponent::PassesTagFilter(const FItemInstance& Item) const
 {
 	UItemDatabaseSubsystem* DB = GetItemDatabase();
@@ -969,6 +1028,15 @@ void UInventoryComponent::ServerRPC_RequestRemoveItem_Implementation(const FGuid
 void UInventoryComponent::ServerRPC_RequestMoveItem_Implementation(const FGuid& InstanceId,
 	UInventoryComponent* Target, int32 TargetSlot)
 {
+	// G96: the client may name only an inventory its player can reach (its own, or one opened to it).
+	if (Target && !Target->IsReachableBy(GetOwner()))
+	{
+		UE_LOG(LogIIP, Warning, TEXT("ServerRPC_RequestMoveItem: %s named an inventory it cannot reach (%s)."),
+			*GetNameSafe(GetOwner()), *GetNameSafe(Target->GetOwner()));
+		ClientRPC_OperationFailed(EInventoryOperationResult::NotAuthorized);
+		return;
+	}
+
 	FInventoryOperationData OpData;
 	if (!ValidateMoveItem(InstanceId, Target, TargetSlot, OpData))
 	{
