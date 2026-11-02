@@ -17,8 +17,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryOperationFailed, EInvent
 /**
  * Manages an inventory of item instances using pre-allocated slots.
  * Supports stacking, weight limits, tag filtering, and cross-inventory transfers.
- * Multiplayer: Try* operations route through ServerRPCs when called on clients.
- * FFastArraySerializer replicates slot changes and fires delegates on clients.
+ * Multiplayer: operations on items the inventory already holds (remove, move, split, merge, swap) route through
+ * ServerRPCs when called on clients; operations that take a whole item (add, replace) run on the authority only, so a
+ * client can never hand the server an item (G91). FFastArraySerializer replicates slot changes and fires delegates on
+ * clients.
  */
 UCLASS(BlueprintType, ClassGroup = "Inventory", meta = (BlueprintSpawnableComponent))
 class ITEMINVENTORYPLUGIN_API UInventoryComponent : public UActorComponent
@@ -70,14 +72,44 @@ public:
 	// Operations
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Add an item, stacking onto existing stacks first, then filling empty slots (PreferredSlot first). Authority only:
+	 * items enter an inventory from server code (loot, crafting, pickups, gathering, saves); a client has no request
+	 * that carries an item (G91). The listen-server host has authority and adds directly.
+	 * @param Item          The item to add, made by UItemDatabaseSubsystem::CreateItemInstance on the server
+	 * @param PreferredSlot The empty slot tried first for what does not stack (-1 = none)
+	 * @return Success; NotAuthorized on a client; the validation failure otherwise (nothing changes)
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Operations")
 	EInventoryOperationResult TryAddItem(const FItemInstance& Item, int32 PreferredSlot = -1);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Operations")
 	EInventoryOperationResult TryRemoveItem(const FGuid& InstanceId, int32 Count = -1);
 
+	/**
+	 * Move a whole stack to another inventory (or another slot of this one). Both sides are validated before either
+	 * changes. A client sends the request to the server.
+	 * @param InstanceId      The stack to move
+	 * @param TargetInventory Where it goes
+	 * @param TargetSlot      -1: stack onto the target's stacks, then its first empty slots. A slot: exactly there, into
+	 *                        the empty slot or merged whole into the same item's stack in it (G94)
+	 * @return Success (Pending on a client); InvalidSlot, SlotOccupied (another item there), StackFull (the stack there
+	 *         cannot take the whole count) or the add / remove validation failure otherwise (nothing changes)
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Operations")
 	EInventoryOperationResult TryMoveItem(const FGuid& InstanceId, UInventoryComponent* TargetInventory, int32 TargetSlot = -1);
+
+	/**
+	 * Put NewItem where the stack InstanceId is, in one step: the stack leaves and NewItem takes its slot. Validated
+	 * whole first (NewItem passes the filters, fits one stack, and the weight after the exchange is allowed), so nothing
+	 * changes on a refusal. Authority only, like TryAddItem: equipping from the inventory uses it to put the item it
+	 * replaces into the slot the new one came from (G90).
+	 * @param InstanceId The stack to take out
+	 * @param NewItem    The item to put in its slot
+	 * @return Success; NotAuthorized on a client; ItemNotFound, InvalidItem, FilterRejected, StackFull or WeightExceeded
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Operations")
+	EInventoryOperationResult TryReplaceItem(const FGuid& InstanceId, const FItemInstance& NewItem);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Operations")
 	EInventoryOperationResult TrySplitStack(const FGuid& InstanceId, int32 SplitCount);
@@ -177,9 +209,6 @@ private:
 	// -----------------------------------------------------------------------
 
 	UFUNCTION(Server, Reliable)
-	void ServerRPC_RequestAddItem(const FItemInstance& Item, int32 PreferredSlot);
-
-	UFUNCTION(Server, Reliable)
 	void ServerRPC_RequestRemoveItem(const FGuid& InstanceId, int32 Count);
 
 	UFUNCTION(Server, Reliable)
@@ -208,6 +237,21 @@ private:
 	bool ValidateAddItem(const FItemInstance& Item, int32 PreferredSlot, FInventoryOperationData& OutData) const;
 	bool ValidateRemoveItem(const FGuid& InstanceId, int32 Count, FInventoryOperationData& OutData) const;
 
+	/**
+	 * The item fits exactly at Slot: the slot is empty, or holds the same item with room for the whole count.
+	 * @param bCountWeight False when the item is already counted in this inventory's weight (a move between its own slots)
+	 */
+	bool ValidateAddItemAtSlot(const FItemInstance& Item, int32 Slot, bool bCountWeight, FInventoryOperationData& OutData) const;
+
+	/** TryMoveItem's predicate, run by the caller and again by the RPC: the source can release, the target can take. */
+	bool ValidateMoveItem(const FGuid& InstanceId, const UInventoryComponent* Target, int32 TargetSlot, FInventoryOperationData& OutData) const;
+
+	/** TryReplaceItem's predicate: the stack exists and NewItem can take its slot. */
+	bool ValidateReplaceItem(const FGuid& InstanceId, const FItemInstance& NewItem, FInventoryOperationData& OutData) const;
+
+	/** True where the inventory's state may change: the owner has authority, or there is no owner (a bare component). */
+	bool HasMutationAuthority() const;
+
 	/** Check if item passes tag filters */
 	bool PassesTagFilter(const FItemInstance& Item) const;
 
@@ -223,6 +267,10 @@ private:
 
 	void Internal_AddItem(const FItemInstance& Item, int32 TargetSlot);
 	void Internal_AddItemStacked(const FItemInstance& Item, int32 PreferredSlot = -1);
+	/** Place the item in Slot, or merge its count into the stack there (after ValidateAddItemAtSlot). */
+	void Internal_AddItemAtSlot(const FItemInstance& Item, int32 Slot);
+	/** Remove the stack here and add it to Target (at TargetSlot when one is given), after ValidateMoveItem. */
+	void Internal_MoveItem(const FGuid& InstanceId, UInventoryComponent* Target, int32 TargetSlot);
 	void Internal_RemoveItem(const FGuid& InstanceId, int32 Count);
 	void Internal_ClearSlot(int32 SlotIndex);
 

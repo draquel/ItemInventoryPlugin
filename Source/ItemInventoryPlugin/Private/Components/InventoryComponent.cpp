@@ -1,4 +1,5 @@
 #include "Components/InventoryComponent.h"
+#include "ItemInventoryPlugin.h"
 #include "Subsystems/ItemDatabaseSubsystem.h"
 #include "Storage/ItemStorageSubsystem.h"
 #include "Data/ItemDefinition.h"
@@ -68,17 +69,17 @@ void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 
 EInventoryOperationResult UInventoryComponent::TryAddItem(const FItemInstance& Item, int32 PreferredSlot)
 {
+	// A client never hands the server an item: there is no add request (G91). Items enter on the server.
+	if (!HasMutationAuthority())
+	{
+		UE_LOG(LogIIP, Warning, TEXT("TryAddItem on a client (%s): adding items is server-only."), *GetNameSafe(GetOwner()));
+		return EInventoryOperationResult::NotAuthorized;
+	}
+
 	FInventoryOperationData OpData;
 	if (!ValidateAddItem(Item, PreferredSlot, OpData))
 	{
 		return OpData.Result;
-	}
-
-	// Client: route through server RPC
-	if (GetOwner() && !GetOwner()->HasAuthority())
-	{
-		ServerRPC_RequestAddItem(Item, PreferredSlot);
-		return EInventoryOperationResult::Pending;
 	}
 
 	// Execute: try stacking first, then fill empty slots
@@ -94,7 +95,7 @@ EInventoryOperationResult UInventoryComponent::TryRemoveItem(const FGuid& Instan
 		return OpData.Result;
 	}
 
-	if (GetOwner() && !GetOwner()->HasAuthority())
+	if (!HasMutationAuthority())
 	{
 		ServerRPC_RequestRemoveItem(InstanceId, Count);
 		return EInventoryOperationResult::Pending;
@@ -107,44 +108,44 @@ EInventoryOperationResult UInventoryComponent::TryRemoveItem(const FGuid& Instan
 EInventoryOperationResult UInventoryComponent::TryMoveItem(const FGuid& InstanceId,
 	UInventoryComponent* TargetInventory, int32 TargetSlot)
 {
-	if (!TargetInventory)
+	FInventoryOperationData OpData;
+	if (!ValidateMoveItem(InstanceId, TargetInventory, TargetSlot, OpData))
 	{
-		return EInventoryOperationResult::Failed;
+		return OpData.Result;
 	}
 
-	// Find source item
-	const FInventorySlot* SourceSlot = FindSlotByInstanceId(InstanceId);
-	if (!SourceSlot || !SourceSlot->bIsOccupied)
-	{
-		return EInventoryOperationResult::ItemNotFound;
-	}
-
-	FItemInstance ItemCopy = SourceSlot->Item;
-
-	// Validate target can accept
-	FInventoryOperationData TargetOpData;
-	if (!TargetInventory->ValidateAddItem(ItemCopy, TargetSlot, TargetOpData))
-	{
-		return TargetOpData.Result;
-	}
-
-	// Validate source can release
-	FInventoryOperationData SourceOpData;
-	if (!ValidateRemoveItem(InstanceId, -1, SourceOpData))
-	{
-		return SourceOpData.Result;
-	}
-
-	if (GetOwner() && !GetOwner()->HasAuthority())
+	if (!HasMutationAuthority())
 	{
 		ServerRPC_RequestMoveItem(InstanceId, TargetInventory, TargetSlot);
 		return EInventoryOperationResult::Pending;
 	}
 
-	// Atomic: remove from source, add to target
-	Internal_RemoveItem(InstanceId, -1);
-	TargetInventory->Internal_AddItemStacked(ItemCopy);
+	Internal_MoveItem(InstanceId, TargetInventory, TargetSlot);
+	return EInventoryOperationResult::Success;
+}
 
+EInventoryOperationResult UInventoryComponent::TryReplaceItem(const FGuid& InstanceId, const FItemInstance& NewItem)
+{
+	// Takes a whole item, so authority only, like TryAddItem (G91).
+	if (!HasMutationAuthority())
+	{
+		UE_LOG(LogIIP, Warning, TEXT("TryReplaceItem on a client (%s): replacing items is server-only."), *GetNameSafe(GetOwner()));
+		return EInventoryOperationResult::NotAuthorized;
+	}
+
+	FInventoryOperationData OpData;
+	if (!ValidateReplaceItem(InstanceId, NewItem, OpData))
+	{
+		return OpData.Result;
+	}
+
+	const int32 SlotIndex = OpData.ResolvedSlot;
+	const FItemInstance RemovedItem = InventorySlots.Items[SlotIndex].Item;
+	Internal_ClearSlot(SlotIndex);
+	OnItemRemoved.Broadcast(RemovedItem, SlotIndex);
+	Internal_AddItem(NewItem, SlotIndex);
+	MarkDirty();
+	BroadcastChanged();
 	return EInventoryOperationResult::Success;
 }
 
@@ -173,7 +174,7 @@ EInventoryOperationResult UInventoryComponent::TrySplitStack(const FGuid& Instan
 		return EInventoryOperationResult::InsufficientSpace;
 	}
 
-	if (GetOwner() && !GetOwner()->HasAuthority())
+	if (!HasMutationAuthority())
 	{
 		ServerRPC_RequestSplitStack(InstanceId, SplitCount);
 		return EInventoryOperationResult::Pending;
@@ -236,7 +237,7 @@ EInventoryOperationResult UInventoryComponent::TryMergeStacks(const FGuid& Sourc
 		return EInventoryOperationResult::StackFull;
 	}
 
-	if (GetOwner() && !GetOwner()->HasAuthority())
+	if (!HasMutationAuthority())
 	{
 		ServerRPC_RequestMergeStacks(SourceId, TargetId);
 		return EInventoryOperationResult::Pending;
@@ -269,7 +270,7 @@ EInventoryOperationResult UInventoryComponent::TrySwapSlots(int32 SlotA, int32 S
 		return EInventoryOperationResult::Success;
 	}
 
-	if (GetOwner() && !GetOwner()->HasAuthority())
+	if (!HasMutationAuthority())
 	{
 		ServerRPC_RequestSwapSlots(SlotA, SlotB);
 		return EInventoryOperationResult::Pending;
@@ -545,6 +546,143 @@ bool UInventoryComponent::ValidateRemoveItem(const FGuid& InstanceId, int32 Coun
 	return true;
 }
 
+bool UInventoryComponent::ValidateAddItemAtSlot(const FItemInstance& Item, int32 Slot, bool bCountWeight,
+	FInventoryOperationData& OutData) const
+{
+	if (!Item.IsValid())
+	{
+		OutData.Result = EInventoryOperationResult::InvalidItem;
+		return false;
+	}
+
+	if (Slot < 0 || Slot >= InventorySlots.Items.Num())
+	{
+		OutData.Result = EInventoryOperationResult::InvalidSlot;
+		return false;
+	}
+
+	if (!PassesTagFilter(Item))
+	{
+		OutData.Result = EInventoryOperationResult::FilterRejected;
+		return false;
+	}
+
+	if (bCountWeight && MaxWeight > 0.0f && GetCurrentWeight() + GetItemWeight(Item) * Item.StackCount > MaxWeight)
+	{
+		OutData.Result = EInventoryOperationResult::WeightExceeded;
+		return false;
+	}
+
+	// The slot takes the whole count or nothing: empty and the count is one stack, or the same item with room for all of it.
+	const FInventorySlot& Target = InventorySlots.Items[Slot];
+	const int32 MaxStack = GetMaxStackSize(Item);
+	if (Target.bIsOccupied)
+	{
+		if (Target.Item.ItemDefinitionId != Item.ItemDefinitionId)
+		{
+			OutData.Result = EInventoryOperationResult::SlotOccupied;
+			return false;
+		}
+		if (Target.Item.StackCount + Item.StackCount > MaxStack)
+		{
+			OutData.Result = EInventoryOperationResult::StackFull;
+			return false;
+		}
+	}
+	else if (Item.StackCount > MaxStack)
+	{
+		OutData.Result = EInventoryOperationResult::StackFull;
+		return false;
+	}
+
+	OutData.ResolvedSlot = Slot;
+	OutData.Result = EInventoryOperationResult::Success;
+	return true;
+}
+
+bool UInventoryComponent::ValidateMoveItem(const FGuid& InstanceId, const UInventoryComponent* Target, int32 TargetSlot,
+	FInventoryOperationData& OutData) const
+{
+	if (!Target)
+	{
+		OutData.Result = EInventoryOperationResult::Failed;
+		return false;
+	}
+
+	if (!ValidateRemoveItem(InstanceId, -1, OutData))
+	{
+		return false;
+	}
+	const int32 SourceSlot = OutData.ResolvedSlot;
+	const FItemInstance& Item = InventorySlots.Items[SourceSlot].Item;
+
+	if (TargetSlot < 0)
+	{
+		return Target->ValidateAddItem(Item, TargetSlot, OutData);
+	}
+
+	// Onto its own slot: nothing to do, and nothing to refuse.
+	if (Target == this && TargetSlot == SourceSlot)
+	{
+		OutData.ResolvedSlot = TargetSlot;
+		OutData.Result = EInventoryOperationResult::Success;
+		return true;
+	}
+
+	// Within one inventory the weight does not change.
+	return Target->ValidateAddItemAtSlot(Item, TargetSlot, /*bCountWeight=*/Target != this, OutData);
+}
+
+bool UInventoryComponent::ValidateReplaceItem(const FGuid& InstanceId, const FItemInstance& NewItem,
+	FInventoryOperationData& OutData) const
+{
+	if (!ValidateRemoveItem(InstanceId, -1, OutData))
+	{
+		return false;
+	}
+	const int32 SlotIndex = OutData.ResolvedSlot;
+	const FItemInstance& Outgoing = InventorySlots.Items[SlotIndex].Item;
+
+	if (!NewItem.IsValid())
+	{
+		OutData.Result = EInventoryOperationResult::InvalidItem;
+		return false;
+	}
+
+	if (!PassesTagFilter(NewItem))
+	{
+		OutData.Result = EInventoryOperationResult::FilterRejected;
+		return false;
+	}
+
+	if (NewItem.StackCount > GetMaxStackSize(NewItem))
+	{
+		OutData.Result = EInventoryOperationResult::StackFull;
+		return false;
+	}
+
+	if (MaxWeight > 0.0f)
+	{
+		const float WeightAfter = GetCurrentWeight() - GetItemWeight(Outgoing) * Outgoing.StackCount
+			+ GetItemWeight(NewItem) * NewItem.StackCount;
+		if (WeightAfter > MaxWeight)
+		{
+			OutData.Result = EInventoryOperationResult::WeightExceeded;
+			return false;
+		}
+	}
+
+	OutData.ResolvedSlot = SlotIndex;
+	OutData.Result = EInventoryOperationResult::Success;
+	return true;
+}
+
+bool UInventoryComponent::HasMutationAuthority() const
+{
+	const AActor* Owner = GetOwner();
+	return !Owner || Owner->HasAuthority();
+}
+
 bool UInventoryComponent::PassesTagFilter(const FItemInstance& Item) const
 {
 	UItemDatabaseSubsystem* DB = GetItemDatabase();
@@ -713,6 +851,55 @@ void UInventoryComponent::Internal_AddItemStacked(const FItemInstance& Item, int
 	BroadcastChanged();
 }
 
+void UInventoryComponent::Internal_AddItemAtSlot(const FItemInstance& Item, int32 Slot)
+{
+	if (Slot < 0 || Slot >= InventorySlots.Items.Num())
+	{
+		return;
+	}
+
+	FInventorySlot& Target = InventorySlots.Items[Slot];
+	if (Target.bIsOccupied)
+	{
+		// The same item (validated): its count joins the stack there, and the moved instance id ends with it.
+		Target.Item.StackCount += Item.StackCount;
+		InventorySlots.MarkItemDirty(Target);
+		OnItemUpdated.Broadcast(Target.Item, Slot);
+	}
+	else
+	{
+		Internal_AddItem(Item, Slot);
+	}
+
+	MarkDirty();
+	BroadcastChanged();
+}
+
+void UInventoryComponent::Internal_MoveItem(const FGuid& InstanceId, UInventoryComponent* Target, int32 TargetSlot)
+{
+	const FInventorySlot* SourceSlot = FindSlotByInstanceId(InstanceId);
+	if (!Target || !SourceSlot)
+	{
+		return;
+	}
+	if (Target == this && TargetSlot == SourceSlot->SlotIndex)
+	{
+		return;
+	}
+
+	// Atomic (both sides were validated): remove from the source, then add to the target.
+	const FItemInstance ItemCopy = SourceSlot->Item;
+	Internal_RemoveItem(InstanceId, -1);
+	if (TargetSlot >= 0)
+	{
+		Target->Internal_AddItemAtSlot(ItemCopy, TargetSlot);
+	}
+	else
+	{
+		Target->Internal_AddItemStacked(ItemCopy);
+	}
+}
+
 void UInventoryComponent::Internal_RemoveItem(const FGuid& InstanceId, int32 Count)
 {
 	FInventorySlot* Slot = FindSlotByInstanceId(InstanceId);
@@ -768,17 +955,6 @@ void UInventoryComponent::BroadcastChanged()
 // Server RPCs
 // ===========================================================================
 
-void UInventoryComponent::ServerRPC_RequestAddItem_Implementation(const FItemInstance& Item, int32 PreferredSlot)
-{
-	FInventoryOperationData OpData;
-	if (!ValidateAddItem(Item, PreferredSlot, OpData))
-	{
-		ClientRPC_OperationFailed(OpData.Result);
-		return;
-	}
-	Internal_AddItemStacked(Item, PreferredSlot);
-}
-
 void UInventoryComponent::ServerRPC_RequestRemoveItem_Implementation(const FGuid& InstanceId, int32 Count)
 {
 	FInventoryOperationData OpData;
@@ -793,37 +969,13 @@ void UInventoryComponent::ServerRPC_RequestRemoveItem_Implementation(const FGuid
 void UInventoryComponent::ServerRPC_RequestMoveItem_Implementation(const FGuid& InstanceId,
 	UInventoryComponent* Target, int32 TargetSlot)
 {
-	if (!Target)
+	FInventoryOperationData OpData;
+	if (!ValidateMoveItem(InstanceId, Target, TargetSlot, OpData))
 	{
-		ClientRPC_OperationFailed(EInventoryOperationResult::Failed);
+		ClientRPC_OperationFailed(OpData.Result);
 		return;
 	}
-
-	const FInventorySlot* SourceSlot = FindSlotByInstanceId(InstanceId);
-	if (!SourceSlot || !SourceSlot->bIsOccupied)
-	{
-		ClientRPC_OperationFailed(EInventoryOperationResult::ItemNotFound);
-		return;
-	}
-
-	FItemInstance ItemCopy = SourceSlot->Item;
-
-	FInventoryOperationData TargetOpData;
-	if (!Target->ValidateAddItem(ItemCopy, TargetSlot, TargetOpData))
-	{
-		ClientRPC_OperationFailed(TargetOpData.Result);
-		return;
-	}
-
-	FInventoryOperationData SourceOpData;
-	if (!ValidateRemoveItem(InstanceId, -1, SourceOpData))
-	{
-		ClientRPC_OperationFailed(SourceOpData.Result);
-		return;
-	}
-
-	Internal_RemoveItem(InstanceId, -1);
-	Target->Internal_AddItemStacked(ItemCopy);
+	Internal_MoveItem(InstanceId, Target, TargetSlot);
 }
 
 void UInventoryComponent::ServerRPC_RequestSplitStack_Implementation(const FGuid& InstanceId, int32 SplitCount)

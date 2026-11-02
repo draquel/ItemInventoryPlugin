@@ -165,6 +165,14 @@ void UItemStorageSubsystem::LoadInventory(UInventoryComponent* Component, const 
 		return;
 	}
 
+	// Loading puts whole items into the inventory: the server's storage only, never a client's (G91).
+	const AActor* Owner = Component->GetOwner();
+	if (Owner && !Owner->HasAuthority())
+	{
+		UE_LOG(LogIIP, Warning, TEXT("ItemStorageSubsystem: LoadInventory('%s') on a client refused: inventories load on the server."), *OwnerId);
+		return;
+	}
+
 	TArray<FItemInstance> Items = ICGFItemStorageInterface::Execute_LoadInventory(
 		StorageBackend.GetObject(), OwnerId);
 

@@ -109,9 +109,14 @@ grows or shrinks; operations fill and clear slots, so slot indices are stable.
 
 ### Operations
 
-All return `EInventoryOperationResult`. On a client each sends its Server RPC and returns `Pending`.
+All return `EInventoryOperationResult`. The operations on an item the inventory already holds (remove, move, split,
+merge, swap) send their Server RPC on a client and return `Pending`. The two that take a whole item, `TryAddItem` and
+`TryReplaceItem`, run on the authority only and return `NotAuthorized` on a client: a client has no request that carries
+an item, so a modified client cannot create one (G91). Items enter an inventory from server code (loot, crafting,
+pickups, gathering, the save); the listen-server host has authority and adds directly. `UItemStorageSubsystem::LoadInventory`
+refuses a client's component the same way.
 
-**TryAddItem**
+**TryAddItem** (authority)
 1. `ValidateAddItem`: valid item, tag filters, weight (`GetItemWeight` × `StackCount` against `MaxWeight`), and room for
    the whole quantity (space left in matching stacks, then the preferred slot, then other empty slots). Otherwise
    `InvalidItem`, `FilterRejected`, `WeightExceeded` or `InsufficientSpace`; nothing is added in part.
@@ -119,9 +124,20 @@ All return `EInventoryOperationResult`. On a client each sends its Server RPC an
 
 **TryRemoveItem**: `Count == -1` removes the stack; a count below the stack decrements it; a count above it fails.
 
-**TryMoveItem** (to another inventory): both sides are validated before either changes (the target's `ValidateAddItem`
-on a copy, the source's `ValidateRemoveItem`); then the whole stack leaves the source and the copy is added to the
-target, stacking where it can.
+**TryMoveItem** (to another inventory, or another slot of this one): `ValidateMoveItem` checks both sides before either
+changes (the source's `ValidateRemoveItem`, then the target's check for a copy); then the whole stack leaves the source
+and the copy is added to the target. With no `TargetSlot` (-1) the target's check is `ValidateAddItem` and the copy is
+added stacking where it can. With a slot (G94) the check is `ValidateAddItemAtSlot` and the copy lands exactly there
+(`Internal_AddItemAtSlot`): into the slot when it is empty, or merged whole into the same item's stack in it; another
+item there is `SlotOccupied`, a stack without room for the whole count `StackFull`, an index out of range
+`InvalidSlot`. Within one inventory the weight is not counted twice, and a move onto the stack's own slot succeeds
+with nothing to do.
+
+**TryReplaceItem** (authority): the stack `InstanceId` leaves and `NewItem` takes its slot, in one step.
+`ValidateReplaceItem` checks it whole first: the stack exists (`ItemNotFound`), `NewItem` is valid (`InvalidItem`),
+passes the filters (`FilterRejected`), fits one stack (`StackFull`), and the weight after the exchange is allowed
+(`WeightExceeded`). Equipping from an inventory into an occupied slot uses it to put the replaced item where the new one
+was, which needs no free slot (`EQUIPMENT_SYSTEM.md`, G90).
 
 **TrySplitStack**: the stack must hold more than `SplitCount` and an empty slot must exist; the new stack gets a new GUID
 and deep copies of the instance fragments.
@@ -138,9 +154,10 @@ definitions), `GetFilledSlotCount`, `CanAcceptItem`, `FindFirstEmptySlot`, `Find
 
 ### Validation and Server RPCs
 
-The server never trusts the client's check (code review decision D-CR16). Add and remove share const predicates,
-`ValidateAddItem` and `ValidateRemoveItem` (filling `FInventoryOperationData`), which the `Try*` functions run on the
-caller and the Server RPCs run again; move runs both predicates on both inventories. Split, merge and swap validate
+The server never trusts the client's check (code review decision D-CR16). Remove and move share const predicates,
+`ValidateRemoveItem` and `ValidateMoveItem` (filling `FInventoryOperationData`), which the `Try*` functions run on the
+caller and the Server RPCs run again; add and replace have no RPC (`ValidateAddItem`, `ValidateReplaceItem` run on the
+authority). Split, merge and swap validate
 inline, in the `Try*` function and again in their Server RPC. A refused RPC calls `ClientRPC_OperationFailed`, which
 fires `OnOperationFailed`. Mutations happen only in the `Internal_*` functions, which mark the slot dirty for
 replication, mark the component dirty for storage and broadcast the delegates.
@@ -293,7 +310,9 @@ Arguments and defaults for every project command are in `Documentation/EDITOR_CO
 ## Tests
 
 `Source/ItemInventoryPlugin/Private/Tests/`, under `ItemInventory.*`: `Operations.*` (add, remove, move across
-inventories, split, merge, swap, failure cases), `Queries.*`, `Filtering.*`, `Types.*`, `Serialization.*`,
+inventories and into a named slot, replace, split, merge, swap, failure cases), `Authority.*` (a client's add and replace
+refused; a move request delivered to the server as an instance id and a slot, simulated server/client in one world with
+`CGFTesting::FRPCCall`), `Queries.*`, `Filtering.*`, `Types.*`, `Serialization.*`,
 `Storage.Blob.LocalRoundTrip`, `ItemInventory.Loot.Distribution` (rolled counts against the entry weights), `Crafting.*`, `Tooltip.*`.
 
 ---
