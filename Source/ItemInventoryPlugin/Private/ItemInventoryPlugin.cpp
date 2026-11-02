@@ -9,6 +9,8 @@
 #include "Subsystems/LootGenerationSubsystem.h"
 #include "Data/ItemDefinition.h"
 #include "Data/LootTable.h"
+#include "Data/CraftingRecipe.h"
+#include "Subsystems/CraftingSubsystem.h"
 #include "Types/CGFItemTypes.h"
 #include "Types/CGFLootTypes.h"
 
@@ -154,6 +156,42 @@ void FItemInventoryPluginModule::StartupModule()
 					UE_LOG(LogIIP, Log, TEXT("  [%d] %s  x%d  (%d fragment(s))"),
 						Slot.SlotIndex, *ItemName, Slot.Item.StackCount, FragmentCount);
 				}
+			})
+	));
+
+	// Inventory.Recipes: every crafting recipe with the player's ingredient counts and whether it can be crafted by hand
+	// and at a campfire (code review CR4, FW-30: was the game module's vox.Recipes, which runs this now).
+	ConsoleCommands.Add(MakeUnique<FAutoConsoleCommandWithWorldAndArgs>(
+		TEXT("Inventory.Recipes"),
+		TEXT("List the crafting recipes with the player's ingredient counts and whether each can be crafted by hand and at a campfire."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda(
+			[](const TArray<FString>& Args, UWorld* World)
+			{
+				UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+				UCraftingSubsystem* Crafting = GameInstance ? GameInstance->GetSubsystem<UCraftingSubsystem>() : nullptr;
+				UItemDatabaseSubsystem* ItemDB = GameInstance ? GameInstance->GetSubsystem<UItemDatabaseSubsystem>() : nullptr;
+				if (!Crafting)
+				{
+					return;
+				}
+				UInventoryComponent* Inventory = FindPlayerInventory(World);
+				const FGameplayTag Campfire = FGameplayTag::RequestGameplayTag(FName("Crafting.Station.Campfire"), false);
+				for (const UCraftingRecipe* Recipe : Crafting->GetAllRecipes())
+				{
+					TArray<FString> Parts;
+					for (const FCraftingIngredient& Ingredient : Recipe->Ingredients)
+					{
+						const UItemDefinition* Def = ItemDB ? ItemDB->GetDefinition(Ingredient.ItemId) : nullptr;
+						Parts.Add(FString::Printf(TEXT("%s %d/%d"), Def ? *Def->DisplayName.ToString() : *Ingredient.ItemId.PrimaryAssetName.ToString(),
+							Inventory ? Inventory->GetItemCount(Ingredient.ItemId) : 0, Ingredient.Count));
+					}
+					UE_LOG(LogIIP, Display, TEXT("  %s -> %d x %s [%s] station=%s hand=%s campfire=%s"),
+						*Recipe->GetFName().ToString(), Recipe->OutputCount, *Recipe->OutputItemId.PrimaryAssetName.ToString(), *FString::Join(Parts, TEXT(", ")),
+						*Recipe->RequiredStationTag.ToString(),
+						*UEnum::GetValueAsString(Crafting->CanCraft(Inventory, Recipe, FGameplayTag())),
+						*UEnum::GetValueAsString(Crafting->CanCraft(Inventory, Recipe, Campfire)));
+				}
+				UE_LOG(LogIIP, Display, TEXT("Inventory.Recipes: %d recipe(s)."), Crafting->GetAllRecipes().Num());
 			})
 	));
 
