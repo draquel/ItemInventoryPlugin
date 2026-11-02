@@ -211,13 +211,20 @@ public:
 	// Storage Operations
 	// -----------------------------------------------------------------------
 
-	/** Manually trigger a save for this inventory */
+	/**
+	 * Start saving this inventory through UItemStorageSubsystem and return at once (OnInventorySaved reports).
+	 * @return False when nothing started: no subsystem, or the inventory is not registered (no StorageOwnerId)
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Storage")
-	void ManualSave();
+	bool ManualSave();
 
-	/** Manually load this inventory from storage */
+	/**
+	 * Start loading this inventory from storage (server only) and return at once; the items replace the inventory when
+	 * the read lands (OnInventoryLoaded reports).
+	 * @return False when nothing started: no StorageOwnerId, no subsystem, or a client's component
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Storage")
-	void ManualLoad();
+	bool ManualLoad();
 
 	// -----------------------------------------------------------------------
 	// Dirty Tracking (for persistence)
@@ -225,6 +232,8 @@ public:
 
 	bool IsDirty() const { return bIsDirty; }
 	void ClearDirty() { bIsDirty = false; }
+	/** Flag the inventory for the next storage save (every mutation does; the storage subsystem does after a failed save). */
+	void MarkDirty();
 
 protected:
 	virtual void BeginPlay() override;
@@ -302,7 +311,6 @@ private:
 	void Internal_RemoveItem(const FGuid& InstanceId, int32 Count);
 	void Internal_ClearSlot(int32 SlotIndex);
 
-	void MarkDirty();
 	void BroadcastChanged();
 
 	/** Set up FFastArraySerializer replication callbacks */
