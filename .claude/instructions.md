@@ -95,5 +95,7 @@ PrivateDependencyModuleNames: UnrealEd, ItemInventoryPlugin, CommonGameFramework
   success and failure cases there. Tests that need the item database or loot subsystem use
   `CGFTesting::FTestGameInstance` (CommonGameFramework); `ItemInventory.Authority.*` plays a client and the server in
   one world (a client is an actor with role AutonomousProxy, `SpawnRemoteOwner`; its requests are delivered to the
-  server's component with `CGFTesting::FRPCCall`). That covers the RPC bodies, not replication itself: there is still no
-  replication functional test (D-CR23 open).
+  server's component with `CGFTesting::FRPCCall`). That covers the RPC bodies; replication itself (the fast array
+  reaching a client, a client's move request and its refusal over the net driver) is the game module's
+  `VoxelEngine.Replication.Framework`, a dedicated-server PIE test the in-editor gate runs (CommonGameFramework
+  `ARCHITECTURE.md` §3.1, D-CR23).

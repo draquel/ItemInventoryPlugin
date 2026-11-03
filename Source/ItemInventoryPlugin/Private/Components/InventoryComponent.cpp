@@ -12,20 +12,33 @@ UInventoryComponent::UInventoryComponent()
 	SetIsReplicatedByDefault(true);
 }
 
+void UInventoryComponent::PostInitProperties()
+{
+	Super::PostInitProperties();
+
+	// Before any replication: on a client the first state arrives with the actor, before BeginPlay, and its callbacks fire.
+	InventorySlots.OwningComponent = this;
+	SetupReplicationCallbacks();
+}
+
 void UInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Pre-allocate slots
-	InventorySlots.Items.SetNum(MaxSlots);
-	for (int32 i = 0; i < MaxSlots; ++i)
+	// The slots are the authority's: it allocates them and marks each for replication, so they reach clients with their
+	// IDs in slot order. A client keeps the array the server sent, which can already hold items (an inventory that
+	// becomes relevant, a player joining). When a client built its own, the server's slots landed behind them and the
+	// occupancy of what had arrived was cleared (G102).
+	if (HasMutationAuthority())
 	{
-		InventorySlots.Items[i].SlotIndex = i;
-		InventorySlots.Items[i].bIsOccupied = false;
+		InventorySlots.Items.SetNum(MaxSlots);
+		for (int32 i = 0; i < MaxSlots; ++i)
+		{
+			InventorySlots.Items[i].SlotIndex = i;
+			InventorySlots.Items[i].bIsOccupied = false;
+			InventorySlots.MarkItemDirty(InventorySlots.Items[i]);
+		}
 	}
-
-	InventorySlots.OwningComponent = this;
-	SetupReplicationCallbacks();
 
 	// Register with storage subsystem for auto-save
 	if (bAutoRegisterStorage && !StorageOwnerId.IsEmpty())
@@ -1190,7 +1203,11 @@ void UInventoryComponent::SetupReplicationCallbacks()
 {
 	InventorySlots.OnSlotAddedCallback = [this](const FInventorySlot& Slot)
 	{
-		OnItemAdded.Broadcast(Slot.Item, Slot.SlotIndex);
+		// A slot arriving on a client: an item only if it holds one (the empty slots arrive with the inventory).
+		if (Slot.bIsOccupied)
+		{
+			OnItemAdded.Broadcast(Slot.Item, Slot.SlotIndex);
+		}
 		OnInventoryChanged.Broadcast();
 	};
 
