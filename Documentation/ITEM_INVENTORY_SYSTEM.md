@@ -104,8 +104,12 @@ behaviour differs by configuration (`MaxSlots` 20, `MaxWeight` 0 = unlimited, `A
 
 ### Slot Pre-Allocation
 
-`BeginPlay` creates `MaxSlots` empty `FInventorySlot` entries in `InventorySlots` (`FInventorySlotArray`). The array never
-grows or shrinks; operations fill and clear slots, so slot indices are stable.
+On the authority, `BeginPlay` creates `MaxSlots` empty `FInventorySlot` entries in `InventorySlots`
+(`FInventorySlotArray`) and marks each for replication. The array never grows or shrinks; operations fill and clear
+slots, so slot indices are stable. A client never builds its own slots: the server's arrive with the component, in
+slot order and before the client's `BeginPlay`, already holding whatever items were there (G102: the client's
+`BeginPlay` used to allocate its own slots, the server's unmarked slots replicated only after the first change and landed
+behind them, and the occupancy of what had arrived was cleared, so a client read the wrong slots).
 
 ### Operations
 
@@ -175,7 +179,9 @@ replication, mark the component dirty for storage and broadcast the delegates.
 
 On clients the slot array's replication callbacks (`PostReplicatedAdd` / `PostReplicatedChange` /
 `PreReplicatedRemove`) raise the same delegates through the `TFunction` callbacks the component binds on
-`FInventorySlotArray`.
+`FInventorySlotArray` in `PostInitProperties`, before the first replication (a slot arriving empty raises only
+`OnInventoryChanged`). `VoxelEngine.Replication.Framework` checks this over the real net driver (CommonGameFramework
+`ARCHITECTURE.md` §3.1).
 
 ---
 
@@ -367,6 +373,8 @@ to it, G96), `Queries.*`, `Filtering.*`, `Types.*`, `Serialization.*`,
 18093, or a closed port: a save returns at once and reports later, retries after 503s, the last of overlapping saves lands and
 a load queued behind them reads it), `Storage.Subsystem.*` (SaveAll returns at once against an unreachable server and
 re-dirties on failure; the local backend saves and loads before returning), `ItemInventory.Loot.Distribution` (rolled counts against the entry weights), `Crafting.*`, `Tooltip.*`.
+Replication over a real connection (a dedicated server and a client in PIE: an add, a move and its refusal, a chest's
+first replication) is the game module's `VoxelEngine.Replication.Framework`, run by the in-editor gate.
 
 ---
 

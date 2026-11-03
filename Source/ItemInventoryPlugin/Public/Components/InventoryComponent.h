@@ -235,6 +235,9 @@ public:
 	/** Flag the inventory for the next storage save (every mutation does; the storage subsystem does after a failed save). */
 	void MarkDirty();
 
+	/** Binds the slot array to this component and its replication callbacks, before any replication can arrive (G102). */
+	virtual void PostInitProperties() override;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
