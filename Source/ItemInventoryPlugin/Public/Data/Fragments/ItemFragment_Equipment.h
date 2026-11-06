@@ -40,6 +40,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Visuals")
 	FTransform AttachOffset = FTransform::Identity;
 
+	/**
+	 * The bone or socket the equipped mesh attaches to instead of its slot's own: a bow equipped in the main hand rides the
+	 * left hand. None = the slot's. With an override the slot's skeleton correction (tuned for its own bone) does not apply;
+	 * AttachOffset alone fits the mesh to the bone.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Visuals")
+	FName AttachBoneOverride;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
