@@ -48,6 +48,9 @@ Item behaviour is composed from fragments, never by subclassing `UItemDefinition
 
 ```
 UItemFragment_Weapon        BaseDamage, AttackSpeed, DamageType (FGameplayTag), CritChance, CritMultiplier
+UItemFragment_RangedWeapon  AmmoTag (Item.Ammo.*), ProjectileClass, LaunchSpeed, MinDrawSeconds, FullDrawSeconds,
+                            MinDrawPower; GetDrawPower(seconds): 0 below the shortest draw, then MinDrawPower rising to 1
+                            (the bow; its damage stays on the Weapon fragment, scaled by the power)
 UItemFragment_Consumable    AttributeChanges (TArray<FCGFAttributeModifier>), ConsumeEffect, ConsumeAbility,
                             bConsumeOnUse, CooldownDuration
 UItemFragment_Durability    MaxDurability, bDestroyAtZero, DegradeRate (per use)
@@ -55,6 +58,7 @@ UItemFragment_Durability    MaxDurability, bDestroyAtZero, DegradeRate (per use)
 UItemFragment_Stackable     MaxStackSize (overrides the definition's), bCanPartialStack (not read by code)
 UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, AnimLayerClass, ActionSetTag (Equipment.AnimSet.*,
                             the holder's montages; the tags are the game's), AttachOffset (per-item fit),
+                            AttachBoneOverride (a bone other than the slot's: the bow in the main hand on hand_l),
                             GrantedAbilities, PassiveEffects, OnEquipEffects, StatModifiers (TArray<FCGFAttributeModifier>)
 UItemFragment_WorldDisplay  WorldMesh, WorldMaterial, WorldScale, WorldRotation (the lying pose),
                             DropVFX and PickupSFX (not read by code)
