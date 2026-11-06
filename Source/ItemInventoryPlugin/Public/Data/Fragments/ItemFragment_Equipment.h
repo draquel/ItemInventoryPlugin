@@ -27,6 +27,13 @@ public:
 	TSubclassOf<UAnimInstance> AnimLayerClass;
 
 	/**
+	 * The action set the item animates its holder with (Equipment.AnimSet.*): which montages a character plays for it,
+	 * beside the layer AnimLayerClass links. Empty = the game's default for a held item. The tags are the game's own.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Visuals", meta = (Categories = "Equipment.AnimSet"))
+	FGameplayTag ActionSetTag;
+
+	/**
 	 * Per-item fit of the equipped mesh, in the slot's corrected frame (applied before the slot's AttachOffset): nudge a
 	 * helmet down onto the head, scale a bulky chest piece. Identity for most items.
 	 */

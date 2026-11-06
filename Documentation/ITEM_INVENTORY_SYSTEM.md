@@ -53,7 +53,8 @@ UItemFragment_Consumable    AttributeChanges (TArray<FCGFAttributeModifier>), Co
 UItemFragment_Durability    MaxDurability, bDestroyAtZero, DegradeRate (per use)
                             pairs with UInstanceFragment_DurabilityState on the instance
 UItemFragment_Stackable     MaxStackSize (overrides the definition's), bCanPartialStack (not read by code)
-UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, AnimLayerClass, AttachOffset (per-item fit),
+UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, AnimLayerClass, ActionSetTag (Equipment.AnimSet.*,
+                            the holder's montages; the tags are the game's), AttachOffset (per-item fit),
                             GrantedAbilities, PassiveEffects, OnEquipEffects, StatModifiers (TArray<FCGFAttributeModifier>)
 UItemFragment_WorldDisplay  WorldMesh, WorldMaterial, WorldScale, WorldRotation (the lying pose),
                             DropVFX and PickupSFX (not read by code)
