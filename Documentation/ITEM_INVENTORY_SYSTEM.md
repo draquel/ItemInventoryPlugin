@@ -87,7 +87,16 @@ Scripts build modifiers with `CGFGameplayEffectStatics.make_attribute_modifier(a
 
 `Types/ItemInstanceFragments.h`: `UInstanceFragment_DurabilityState` (`CurrentDurability`) and
 `UInstanceFragment_CustomDataMap` (a string map; `SetValue` / `GetValue` / `HasKey`). Both serialize themselves for
-storage (`SerializeFragment` / `DeserializeFragment`).
+storage (`SerializeFragment` / `DeserializeFragment`) and the network (`NetSerialize`, inside the item's).
+
+Their fields are `BlueprintReadOnly` (and `EditAnywhere`, for a definition's defaults). A held item's fragment changes in
+C++, on the server, through `FItemInstance::EditFragment<T>()` on the item where it is held, which bumps the item's
+fragment revision: replication compares an item with its last sent state through `FItemInstance::Identical`, and that
+state shares the fragment objects, so the revision is the only thing that shows a change to their contents (G136;
+CommonGameFramework `COMMON_TYPES.md`). For an item in a bag: copy it (`GetItemInSlot`), edit the copy's fragment, and
+write the copy back with `TryReplaceItem` and its own id, which marks the slot dirty; the copy shares the fragment
+objects, so a copy never written back changes the server's item without replicating it. `SetValue` is for an item no
+slot holds yet, or for the fragment `EditFragment` returns.
 
 ### UItemDatabaseSubsystem
 
@@ -187,8 +196,9 @@ On clients the slot array's replication callbacks (`PostReplicatedAdd` / `PostRe
 `FInventorySlotArray` in `PostInitProperties`, before the first replication (a slot arriving empty raises only
 `OnInventoryChanged`). A slot whose item keeps its id but not its count (a partial removal, a stack added onto, a split,
 a merge) is sent because the fast array compares the item with `FItemInstance::Identical` (the id, the definition, the
-count, the fragment objects), not with its identity `operator==` (G135). `VoxelEngine.Replication.Framework` checks
-this over the real net driver (CommonGameFramework `ARCHITECTURE.md` §3.1).
+count, the fragment objects, the fragment revision), not with its identity `operator==` (G135); so is one whose
+fragment changed, written back with `TryReplaceItem` (G136, "Instance Fragments" above). `VoxelEngine.Replication.Framework`
+checks both over the real net driver (CommonGameFramework `ARCHITECTURE.md` §3.1).
 
 ---
 
@@ -375,14 +385,16 @@ Arguments and defaults for every project command are in `Documentation/EDITOR_CO
 inventories and into a named slot, replace, split, merge, swap, failure cases), `Authority.*` (a client's add and replace
 refused; a move request delivered to the server as an instance id and a slot, simulated server/client in one world with
 `CGFTesting::FRPCCall`; `Authority.MoveTargetReach`, a move's target only the requester's own inventories or one opened
-to it, G96), `Queries.*`, `Filtering.*`, `Types.*` (with `Types.ItemInstance.Identical` and
-`Types.InventorySlot.ItemCountChangeIsAChange`, the comparison replication runs, G135), `Serialization.*`,
+to it, G96), `Queries.*`, `Filtering.*`, `Types.*` (with `Types.ItemInstance.Identical`,
+`Types.InventorySlot.ItemCountChangeIsAChange` and `Types.InventorySlot.FragmentEditIsAChange`, the comparison
+replication runs, G135 and G136), `Serialization.*`,
 `Storage.Blob.LocalRoundTrip`, `Storage.Remote.*` (G93, against a minimal HTTP server on a socket in the process, port
 18093, or a closed port: a save returns at once and reports later, retries after 503s, the last of overlapping saves lands and
 a load queued behind them reads it), `Storage.Subsystem.*` (SaveAll returns at once against an unreachable server and
 re-dirties on failure; the local backend saves and loads before returning), `ItemInventory.Loot.Distribution` (rolled counts against the entry weights), `Crafting.*`, `Tooltip.*`.
 Replication over a real connection (a dedicated server and a client in PIE: an add, a move and its refusal, a stack's
-count changed in place, a chest's first replication) is the game module's `VoxelEngine.Replication.Framework`, run by the in-editor gate.
+count changed in place, a bag item's fragment changed and written back, a chest's first replication) is the game
+module's `VoxelEngine.Replication.Framework`, run by the in-editor gate.
 
 ---
 
