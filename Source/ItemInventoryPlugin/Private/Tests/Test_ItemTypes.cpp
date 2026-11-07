@@ -1,6 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "Types/CGFItemTypes.h"
 #include "Types/CGFLootTypes.h"
+#include "Types/ItemInstanceFragments.h"
 #include "Data/LootEntry.h"
 
 #if WITH_AUTOMATION_TESTS
@@ -102,6 +103,89 @@ bool FItemType_Equality::RunTest(const FString& Parameters)
 	C.StackCount = A.StackCount;
 	TestTrue("Different GUID = not equal", A != C);
 
+	return true;
+}
+
+// ===========================================================================
+// FItemInstance::Identical: what replication compares (G135)
+// ===========================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemType_Identical,
+	"ItemInventory.Types.ItemInstance.Identical",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FItemType_Identical::RunTest(const FString& Parameters)
+{
+	// The reflection system's comparison (UScriptStruct::CompareScriptStruct), the one replication runs through Identical.
+	const UScriptStruct* Struct = FItemInstance::StaticStruct();
+	const auto IsIdentical = [Struct](const FItemInstance& A, const FItemInstance& B)
+	{
+		return Struct->CompareScriptStruct(&A, &B, PPF_None);
+	};
+
+	FItemInstance Arrows;
+	Arrows.InstanceId = FGuid::NewGuid();
+	Arrows.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Arrow"));
+	Arrows.StackCount = 20;
+
+	TestTrue("A copy is identical", IsIdentical(Arrows, FItemInstance(Arrows)));
+
+	// One arrow shot from the stack: the same instance, but not the same value.
+	FItemInstance Shot = Arrows;
+	Shot.StackCount = 19;
+	TestTrue("A count changed in place keeps the instance (operator== is identity)", Arrows == Shot);
+	TestFalse("A count changed in place is not identical", IsIdentical(Arrows, Shot));
+
+	FItemInstance OtherDefinition = Arrows;
+	OtherDefinition.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Bolt"));
+	TestFalse("Another definition is not identical", IsIdentical(Arrows, OtherDefinition));
+
+	FItemInstance OtherId = Arrows;
+	OtherId.InstanceId = FGuid::NewGuid();
+	TestFalse("Another instance id is not identical", IsIdentical(Arrows, OtherId));
+
+	// Fragments compare as objects: the same ones are identical, one added or replaced is not.
+	FItemInstance Worn = Arrows;
+	Worn.InstanceFragments.Add(NewObject<UInstanceFragment_DurabilityState>());
+	TestTrue("The same fragment objects are identical", IsIdentical(Worn, FItemInstance(Worn)));
+	TestFalse("A fragment added is not identical", IsIdentical(Arrows, Worn));
+	FItemInstance Replaced = Worn;
+	Replaced.InstanceFragments[0] = NewObject<UInstanceFragment_DurabilityState>();
+	TestFalse("A fragment replaced is not identical", IsIdentical(Worn, Replaced));
+
+	TestFalse("Null is no match", Arrows.Identical(nullptr, PPF_None));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemType_SlotItemCountChange,
+	"ItemInventory.Types.InventorySlot.ItemCountChangeIsAChange",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FItemType_SlotItemCountChange::RunTest(const FString& Parameters)
+{
+	// The fast array's delta serialization compares a dirty slot with the state it last sent property by property,
+	// FInventorySlot::Item through FStructProperty::Identical: a slot whose item kept its id but not its count must differ
+	// there, or the count never reaches the client (G135).
+	const FProperty* ItemProperty = FInventorySlot::StaticStruct()->FindPropertyByName(GET_MEMBER_NAME_CHECKED(FInventorySlot, Item));
+	if (!TestNotNull("FInventorySlot::Item is a property", ItemProperty))
+	{
+		return false;
+	}
+
+	FInventorySlot Sent;
+	Sent.SlotIndex = 3;
+	Sent.bIsOccupied = true;
+	Sent.Item.InstanceId = FGuid::NewGuid();
+	Sent.Item.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Arrow"));
+	Sent.Item.StackCount = 20;
+
+	FInventorySlot Now = Sent;
+	TestTrue("An unchanged slot's item is identical", ItemProperty->Identical_InContainer(&Sent, &Now));
+	TestTrue("An unchanged slot is identical", FInventorySlot::StaticStruct()->CompareScriptStruct(&Sent, &Now, PPF_None));
+
+	Now.Item.StackCount = 24;
+	TestFalse("The item's count changed in place: the item property differs", ItemProperty->Identical_InContainer(&Sent, &Now));
+	TestFalse("The item's count changed in place: the slot differs", FInventorySlot::StaticStruct()->CompareScriptStruct(&Sent, &Now, PPF_None));
 	return true;
 }
 
