@@ -48,6 +48,23 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Visuals")
 	FName AttachBoneOverride;
 
+	/**
+	 * Where the item is carried when it is not in the hand (the equipment sheathing plan, D76): a sheath slot
+	 * (Equipment.Slot.Sheath.*) or a parent of several, matched as EquipmentSlotTag is. An owner with such a slot equips the
+	 * item there and draws it into the sheath's hand (EquipmentSlotTag stays the hand it is used in); an owner without one
+	 * equips it into EquipmentSlotTag. Empty = never sheathed.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Sheath", meta = (Categories = "Equipment.Slot.Sheath"))
+	FGameplayTag SheathSlotTag;
+
+	/** The sheathed mesh's fit on the sheath's bone, in the sheath slot's corrected frame (as AttachOffset is in the hand's). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Sheath")
+	FTransform SheathOffset = FTransform::Identity;
+
+	/** The bone the sheathed mesh hangs on instead of the sheath slot's own; with it SheathOffset alone fits the mesh. None = the slot's. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Sheath")
+	FName SheathBoneOverride;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
