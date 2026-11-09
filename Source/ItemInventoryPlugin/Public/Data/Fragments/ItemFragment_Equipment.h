@@ -49,7 +49,7 @@ public:
 	FName AttachBoneOverride;
 
 	/**
-	 * Where the item is carried when it is not in the hand (the equipment sheathing plan, D76): a sheath slot
+	 * Where the item is carried when it is not in the hand (the equipment sheathing plan, D77): a sheath slot
 	 * (Equipment.Slot.Sheath.*) or a parent of several, matched as EquipmentSlotTag is. An owner with such a slot equips the
 	 * item there and draws it into the sheath's hand (EquipmentSlotTag stays the hand it is used in); an owner without one
 	 * equips it into EquipmentSlotTag. Empty = never sheathed.
