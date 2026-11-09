@@ -59,6 +59,8 @@ UItemFragment_Stackable     MaxStackSize (overrides the definition's), bCanParti
 UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, AnimLayerClass, ActionSetTag (Equipment.AnimSet.*,
                             the holder's montages; the tags are the game's), AttachOffset (per-item fit),
                             AttachBoneOverride (a bone other than the slot's: the bow in the main hand on hand_l),
+                            SheathSlotTag, SheathOffset, SheathBoneOverride (where the item is carried until drawn:
+                            an Equipment.Slot.Sheath.* slot, the fit there and its own bone; EquipmentPlugin's "Sheaths"),
                             GrantedAbilities, PassiveEffects, OnEquipEffects, StatModifiers (TArray<FCGFAttributeModifier>)
 UItemFragment_WorldDisplay  WorldMesh, WorldMaterial, WorldScale, WorldRotation (the lying pose),
                             DropVFX and PickupSFX (not read by code)
