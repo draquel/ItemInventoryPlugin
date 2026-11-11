@@ -65,6 +65,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Sheath")
 	FName SheathBoneOverride;
 
+	/**
+	 * The slots this item empties while it is in the hand (a bow or a two-handed weapon blocks Equipment.Slot.OffHand: no
+	 * shield beside it). A sheath drawn into a blocked hand is sheathed when the item comes into the hand, and an equip or
+	 * a draw into a blocked hand leaves its item sheathed. Empty = blocks nothing.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment", meta = (Categories = "Equipment.Slot"))
+	FGameplayTagContainer BlockedSlotTags;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
