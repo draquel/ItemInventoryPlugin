@@ -82,6 +82,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Sheath", meta = (Categories = "Equipment.Slot"))
 	FGameplayTag DrawWithSlotTag;
 
+	/**
+	 * The slot whose place on the body this item shares (the sheath loadout plan, D97): a quiver worn on the back shares
+	 * the back's sheath, Equipment.Slot.Sheath.Back. Only an item SharesPlaceWithItemTags names can be there with it (a
+	 * bow); equipping another there sends this item to the bag, and equipping this item sends another there to the bag.
+	 * Empty = it shares no place.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment", meta = (Categories = "Equipment.Slot"))
+	FGameplayTag SharesPlaceWithSlotTag;
+
+	/** The items (their definition's tags, any of these) that can be in SharesPlaceWithSlotTag beside this one: Item.Type.Bow. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment")
+	FGameplayTagContainer SharesPlaceWithItemTags;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
