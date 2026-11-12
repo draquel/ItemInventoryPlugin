@@ -61,8 +61,9 @@ UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, Anim
                             AttachBoneOverride (a bone other than the slot's: the bow in the main hand on hand_l),
                             SheathSlotTag, SheathOffset, SheathBoneOverride (where the item is carried until drawn:
                             an Equipment.Slot.Sheath.* slot, the fit there and its own bone; EquipmentPlugin's "Sheaths"),
-                            BlockedSlotTags (the slots it empties while in the hand: the bow's and a two-hander's
-                            Equipment.Slot.OffHand, G175),
+                            BlockedSlotTags (the slots it empties while in the hand: the bow's and a pickaxe's
+                            Equipment.Slot.OffHand, G175), DrawWithSlotTag (the hand it follows: the shield comes into
+                            its own hand with the weapon drawn into Equipment.Slot.MainHand and goes back with it, D96),
                             GrantedAbilities, PassiveEffects, OnEquipEffects, StatModifiers (TArray<FCGFAttributeModifier>)
 UItemFragment_Shield        BlockDamageReduction (the share of a blocked hit the guard takes), BlockHalfAngle (degrees
                             either side of the facing), StaminaPerBlockedDamage; read by the game's block (D94)
