@@ -66,12 +66,21 @@ public:
 	FName SheathBoneOverride;
 
 	/**
-	 * The slots this item empties while it is in the hand (a bow or a two-handed weapon blocks Equipment.Slot.OffHand: no
-	 * shield beside it). A sheath drawn into a blocked hand is sheathed when the item comes into the hand, and an equip or
-	 * a draw into a blocked hand leaves its item sheathed. Empty = blocks nothing.
+	 * The slots this item empties while it is in the hand: it needs both hands (a bow or a pickaxe blocks
+	 * Equipment.Slot.OffHand: no shield, no torch beside it). A sheath drawn into a blocked hand is sheathed when the item
+	 * comes into the hand, and an equip or a draw into a blocked hand leaves its item sheathed. Empty = blocks nothing.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment", meta = (Categories = "Equipment.Slot"))
 	FGameplayTagContainer BlockedSlotTags;
+
+	/**
+	 * The hand this sheathed item follows (the sheath loadout plan, D96): it comes into its own hand (EquipmentSlotTag)
+	 * when that hand holds an item that does not block its own hand (BlockedSlotTags) and its own hand is free, and goes
+	 * back to its sheath otherwise. A shield names Equipment.Slot.MainHand: drawn with a one-handed weapon, sheathed with
+	 * it. The equipment manager keeps it so; a direct draw or sheathe of the item is refused. Empty = drawn on its own.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Sheath", meta = (Categories = "Equipment.Slot"))
+	FGameplayTag DrawWithSlotTag;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equipment|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
