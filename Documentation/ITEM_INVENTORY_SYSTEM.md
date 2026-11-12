@@ -64,6 +64,8 @@ UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, Anim
                             BlockedSlotTags (the slots it empties while in the hand: the bow's and a pickaxe's
                             Equipment.Slot.OffHand, G175), DrawWithSlotTag (the hand it follows: the shield comes into
                             its own hand with the weapon drawn into Equipment.Slot.MainHand and goes back with it, D96),
+                            SharesPlaceWithSlotTag, SharesPlaceWithItemTags (a slot whose place it shares and the items
+                            that can be there with it: the quiver, the back and a bow; any other is sent to the bag, D97),
                             GrantedAbilities, PassiveEffects, OnEquipEffects, StatModifiers (TArray<FCGFAttributeModifier>)
 UItemFragment_Shield        BlockDamageReduction (the share of a blocked hit the guard takes), BlockHalfAngle (degrees
                             either side of the facing), StaminaPerBlockedDamage; read by the game's block (D94)
