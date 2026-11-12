@@ -61,7 +61,11 @@ UItemFragment_Equipment     EquipmentSlotTag, EquipMesh, EquipSkeletalMesh, Anim
                             AttachBoneOverride (a bone other than the slot's: the bow in the main hand on hand_l),
                             SheathSlotTag, SheathOffset, SheathBoneOverride (where the item is carried until drawn:
                             an Equipment.Slot.Sheath.* slot, the fit there and its own bone; EquipmentPlugin's "Sheaths"),
+                            BlockedSlotTags (the slots it empties while in the hand: the bow's and a two-hander's
+                            Equipment.Slot.OffHand, G175),
                             GrantedAbilities, PassiveEffects, OnEquipEffects, StatModifiers (TArray<FCGFAttributeModifier>)
+UItemFragment_Shield        BlockDamageReduction (the share of a blocked hit the guard takes), BlockHalfAngle (degrees
+                            either side of the facing), StaminaPerBlockedDamage; read by the game's block (D94)
 UItemFragment_WorldDisplay  WorldMesh, WorldMaterial, WorldScale, WorldRotation (the lying pose),
                             DropVFX and PickupSFX (not read by code)
 UItemFragment_Key           KeyTag (Item.Key.*), bConsumeOnUnlock; Opens(LockTag)
