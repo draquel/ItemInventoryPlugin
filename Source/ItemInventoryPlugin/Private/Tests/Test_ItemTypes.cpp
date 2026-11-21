@@ -1,6 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "Types/CGFItemTypes.h"
 #include "Types/CGFLootTypes.h"
+#include "Types/ItemInstanceFragments.h"
 #include "Data/LootEntry.h"
 
 #if WITH_AUTOMATION_TESTS
@@ -102,6 +103,135 @@ bool FItemType_Equality::RunTest(const FString& Parameters)
 	C.StackCount = A.StackCount;
 	TestTrue("Different GUID = not equal", A != C);
 
+	return true;
+}
+
+// ===========================================================================
+// FItemInstance::Identical: what replication compares (G135)
+// ===========================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemType_Identical,
+	"ItemInventory.Types.ItemInstance.Identical",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FItemType_Identical::RunTest(const FString& Parameters)
+{
+	// The reflection system's comparison (UScriptStruct::CompareScriptStruct), the one replication runs through Identical.
+	const UScriptStruct* Struct = FItemInstance::StaticStruct();
+	const auto IsIdentical = [Struct](const FItemInstance& A, const FItemInstance& B)
+	{
+		return Struct->CompareScriptStruct(&A, &B, PPF_None);
+	};
+
+	FItemInstance Arrows;
+	Arrows.InstanceId = FGuid::NewGuid();
+	Arrows.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Arrow"));
+	Arrows.StackCount = 20;
+
+	TestTrue("A copy is identical", IsIdentical(Arrows, FItemInstance(Arrows)));
+
+	// One arrow shot from the stack: the same instance, but not the same value.
+	FItemInstance Shot = Arrows;
+	Shot.StackCount = 19;
+	TestTrue("A count changed in place keeps the instance (operator== is identity)", Arrows == Shot);
+	TestFalse("A count changed in place is not identical", IsIdentical(Arrows, Shot));
+
+	FItemInstance OtherDefinition = Arrows;
+	OtherDefinition.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Bolt"));
+	TestFalse("Another definition is not identical", IsIdentical(Arrows, OtherDefinition));
+
+	FItemInstance OtherId = Arrows;
+	OtherId.InstanceId = FGuid::NewGuid();
+	TestFalse("Another instance id is not identical", IsIdentical(Arrows, OtherId));
+
+	// Fragments compare as objects: the same ones are identical, one added or replaced is not.
+	FItemInstance Worn = Arrows;
+	Worn.InstanceFragments.Add(NewObject<UInstanceFragment_DurabilityState>());
+	TestTrue("The same fragment objects are identical", IsIdentical(Worn, FItemInstance(Worn)));
+	TestFalse("A fragment added is not identical", IsIdentical(Arrows, Worn));
+	FItemInstance Replaced = Worn;
+	Replaced.InstanceFragments[0] = NewObject<UInstanceFragment_DurabilityState>();
+	TestFalse("A fragment replaced is not identical", IsIdentical(Worn, Replaced));
+
+	// A fragment's contents changed in place: a copy made before shares the fragment object, so it reads the new value
+	// too, and only the revision EditFragment bumps tells the two apart (G136).
+	const FItemInstance BeforeWear = Worn;
+	Worn.EditFragment<UInstanceFragment_DurabilityState>()->CurrentDurability -= 5.f;
+	TestEqual("A copy shares its fragment objects", BeforeWear.FindFragment<UInstanceFragment_DurabilityState>()->CurrentDurability, 95.f);
+	TestFalse("A fragment edited in place is not identical", IsIdentical(BeforeWear, Worn));
+	TestTrue("A copy after the edit is identical", IsIdentical(Worn, FItemInstance(Worn)));
+	const FItemInstance NoFragment = Arrows;
+	TestNull("EditFragment of a class the item lacks is null", Arrows.EditFragment<UInstanceFragment_CustomDataMap>());
+	TestTrue("and marks nothing", IsIdentical(NoFragment, Arrows));
+
+	TestFalse("Null is no match", Arrows.Identical(nullptr, PPF_None));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemType_SlotItemCountChange,
+	"ItemInventory.Types.InventorySlot.ItemCountChangeIsAChange",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FItemType_SlotItemCountChange::RunTest(const FString& Parameters)
+{
+	// The fast array's delta serialization compares a dirty slot with the state it last sent property by property,
+	// FInventorySlot::Item through FStructProperty::Identical: a slot whose item kept its id but not its count must differ
+	// there, or the count never reaches the client (G135).
+	const FProperty* ItemProperty = FInventorySlot::StaticStruct()->FindPropertyByName(GET_MEMBER_NAME_CHECKED(FInventorySlot, Item));
+	if (!TestNotNull("FInventorySlot::Item is a property", ItemProperty))
+	{
+		return false;
+	}
+
+	FInventorySlot Sent;
+	Sent.SlotIndex = 3;
+	Sent.bIsOccupied = true;
+	Sent.Item.InstanceId = FGuid::NewGuid();
+	Sent.Item.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Arrow"));
+	Sent.Item.StackCount = 20;
+
+	FInventorySlot Now = Sent;
+	TestTrue("An unchanged slot's item is identical", ItemProperty->Identical_InContainer(&Sent, &Now));
+	TestTrue("An unchanged slot is identical", FInventorySlot::StaticStruct()->CompareScriptStruct(&Sent, &Now, PPF_None));
+
+	Now.Item.StackCount = 24;
+	TestFalse("The item's count changed in place: the item property differs", ItemProperty->Identical_InContainer(&Sent, &Now));
+	TestFalse("The item's count changed in place: the slot differs", FInventorySlot::StaticStruct()->CompareScriptStruct(&Sent, &Now, PPF_None));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemType_SlotFragmentEdit,
+	"ItemInventory.Types.InventorySlot.FragmentEditIsAChange",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FItemType_SlotFragmentEdit::RunTest(const FString& Parameters)
+{
+	// The state the fast array last sent is a shallow copy of the slot: it shares the item's fragment objects, so a
+	// fragment's contents changed in place are the same on both sides of the comparison. Only the revision EditFragment
+	// bumps, copied by value, makes the slot differ there (G136).
+	const FProperty* ItemProperty = FInventorySlot::StaticStruct()->FindPropertyByName(GET_MEMBER_NAME_CHECKED(FInventorySlot, Item));
+	if (!TestNotNull("FInventorySlot::Item is a property", ItemProperty))
+	{
+		return false;
+	}
+
+	FInventorySlot Now;
+	Now.SlotIndex = 2;
+	Now.bIsOccupied = true;
+	Now.Item.InstanceId = FGuid::NewGuid();
+	Now.Item.ItemDefinitionId = FPrimaryAssetId(TEXT("ItemDefinition"), TEXT("Sword"));
+	Now.Item.StackCount = 1;
+	UInstanceFragment_DurabilityState* Durability = NewObject<UInstanceFragment_DurabilityState>();
+	Now.Item.InstanceFragments.Add(Durability);
+	const FInventorySlot Sent = Now;
+
+	// Changed behind the item's back (a pointer kept from before): the same objects, the same revision, no difference.
+	Durability->CurrentDurability = 80.f;
+	TestTrue("A fragment changed without EditFragment is invisible to the comparison", ItemProperty->Identical_InContainer(&Sent, &Now));
+
+	Now.Item.EditFragment<UInstanceFragment_DurabilityState>()->CurrentDurability = 60.f;
+	TestFalse("A fragment edited through the item: the item property differs", ItemProperty->Identical_InContainer(&Sent, &Now));
+	TestFalse("A fragment edited through the item: the slot differs", FInventorySlot::StaticStruct()->CompareScriptStruct(&Sent, &Now, PPF_None));
 	return true;
 }
 
